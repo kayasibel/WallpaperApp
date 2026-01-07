@@ -1,6 +1,6 @@
 {
-    "name": "wallpaper_theme_app",
-    "short_name": "wallpaper_theme_app",
+    "name": "VibeSet: Aesthetic Themes & Wallpapers",
+    "short_name": "VibeSet Wallpapers",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

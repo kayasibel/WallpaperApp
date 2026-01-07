@@ -1,6 +1,6 @@
-# wallpaper_theme_app
+# VibeSet: Aesthetic Themes & Wallpapers
 
-A new Flutter project.
+A modern Flutter application for discovering and applying stunning wallpapers and aesthetic icon themes.
 
 ## Getting Started
 

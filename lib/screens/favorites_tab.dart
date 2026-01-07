@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import '../models/wallpaper_model.dart';
 import '../models/theme_model.dart';
-import '../data/wallpaper_data.dart';
+import '../services/wallpaper_service.dart';
+import '../services/theme_service.dart';
 import '../services/favorite_service.dart';
+import '../services/language_service.dart';
 import 'wallpaper_detail_screen.dart';
 import 'theme_detail_screen.dart';
 
@@ -15,7 +18,8 @@ class FavoritesTab extends StatefulWidget {
 }
 
 class _FavoritesTabState extends State<FavoritesTab> {
-  final WallpaperData _wallpaperData = WallpaperData();
+  final WallpaperService _wallpaperService = WallpaperService();
+  final ThemeService _themeService = ThemeService();
   final FavoriteService _favoriteService = FavoriteService();
   List<WallpaperModel> _favoriteWallpapers = [];
   List<ThemeModel> _favoriteThemes = [];
@@ -41,17 +45,27 @@ class _FavoritesTabState extends State<FavoritesTab> {
       _isLoading = true;
     });
 
-    // Favori duvar kağıdı ID'lerini çek
+    // Favori duvar kağıdı ID'lerini çek ve Firestore'dan getir
     final favoriteWallpaperIds = await _favoriteService.getFavorites();
-    final favoriteWallpapers = _wallpaperData.getWallpapersByIds(favoriteWallpaperIds);
+    final List<WallpaperModel> favoriteWallpapers = [];
 
-    // Favori tema ID'lerini çek
+    for (String id in favoriteWallpaperIds) {
+      final wallpaper = await _wallpaperService.getWallpaperById(id);
+      if (wallpaper != null) {
+        favoriteWallpapers.add(wallpaper);
+      }
+    }
+
+    // Favori tema ID'lerini çek ve Firestore'dan getir
     final favoriteThemeIds = await _favoriteService.getFavoriteThemes();
-    
-    // ThemesTab'daki temalar ile eşleştir (ThemesTab'dan almamız gerekiyor)
-    // Geçici olarak ThemesTab'daki _allThemes listesini kopyalayacağız
-    final allThemes = _getAllThemes();
-    final favoriteThemes = allThemes.where((theme) => favoriteThemeIds.contains(theme.id)).toList();
+    final List<ThemeModel> favoriteThemes = [];
+
+    for (String id in favoriteThemeIds) {
+      final theme = await _themeService.getThemeById(id);
+      if (theme != null) {
+        favoriteThemes.add(theme);
+      }
+    }
 
     setState(() {
       _favoriteWallpapers = favoriteWallpapers;
@@ -60,88 +74,12 @@ class _FavoritesTabState extends State<FavoritesTab> {
     });
   }
 
-  // ThemesTab'daki tema listesini al (geçici çözüm - ideal olarak merkezi data source olmalı)
-  List<ThemeModel> _getAllThemes() {
-    return [
-      ThemeModel(
-        id: 't1',
-        title: 'Retro Vibes',
-        previewImageUrl: 'https://picsum.photos/id/200/300/400',
-        iconCount: 48,
-        isPremium: false,
-      ),
-      ThemeModel(
-        id: 't2',
-        title: 'Minimal Dark',
-        previewImageUrl: 'https://picsum.photos/id/201/300/400',
-        iconCount: 52,
-        isPremium: true,
-      ),
-      ThemeModel(
-        id: 't3',
-        title: 'Neon Nights',
-        previewImageUrl: 'https://picsum.photos/id/202/300/400',
-        iconCount: 60,
-        isPremium: false,
-      ),
-      ThemeModel(
-        id: 't4',
-        title: 'Modern Clean',
-        previewImageUrl: 'https://picsum.photos/id/203/300/400',
-        iconCount: 45,
-        isPremium: false,
-      ),
-      ThemeModel(
-        id: 't5',
-        title: 'Retro Gaming',
-        previewImageUrl: 'https://picsum.photos/id/204/300/400',
-        iconCount: 55,
-        isPremium: true,
-      ),
-      ThemeModel(
-        id: 't6',
-        title: 'Minimal Light',
-        previewImageUrl: 'https://picsum.photos/id/205/300/400',
-        iconCount: 50,
-        isPremium: false,
-      ),
-      ThemeModel(
-        id: 't7',
-        title: 'Neon Cyber',
-        previewImageUrl: 'https://picsum.photos/id/206/300/400',
-        iconCount: 58,
-        isPremium: true,
-      ),
-      ThemeModel(
-        id: 't8',
-        title: 'Modern Glass',
-        previewImageUrl: 'https://picsum.photos/id/207/300/400',
-        iconCount: 62,
-        isPremium: false,
-      ),
-      ThemeModel(
-        id: 't9',
-        title: 'Retro Wave',
-        previewImageUrl: 'https://picsum.photos/id/208/300/400',
-        iconCount: 47,
-        isPremium: false,
-      ),
-      ThemeModel(
-        id: 't10',
-        title: 'Minimal Pro',
-        previewImageUrl: 'https://picsum.photos/id/209/300/400',
-        iconCount: 65,
-        isPremium: true,
-      ),
-    ];
-  }
-
   @override
   Widget build(BuildContext context) {
+    final langProvider = Provider.of<LanguageProvider>(context);
+
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     final hasWallpapers = _favoriteWallpapers.isNotEmpty;
@@ -153,26 +91,17 @@ class _FavoritesTabState extends State<FavoritesTab> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.favorite_border,
-              size: 64,
-              color: Colors.grey[600],
-            ),
+            Icon(Icons.favorite_border, size: 64, color: Colors.grey[600]),
             const SizedBox(height: 16),
             Text(
-              'Henüz favori yok',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey[600],
-              ),
+              langProvider.getText('favorites'),
+              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
             ),
             const SizedBox(height: 8),
             Text(
-              'Beğendiğiniz duvar kağıtlarını ve temaları favorilere ekleyin',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[500],
-              ),
+              langProvider.getText('no_favorites'),
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -187,10 +116,7 @@ class _FavoritesTabState extends State<FavoritesTab> {
           decoration: BoxDecoration(
             color: Theme.of(context).scaffoldBackgroundColor,
             border: Border(
-              bottom: BorderSide(
-                color: Colors.grey[800]!,
-                width: 1,
-              ),
+              bottom: BorderSide(color: Colors.grey[800]!, width: 1),
             ),
           ),
           child: Row(
@@ -215,7 +141,7 @@ class _FavoritesTabState extends State<FavoritesTab> {
                     ),
                     child: Center(
                       child: Text(
-                        'Duvar Kağıtları (${_favoriteWallpapers.length})',
+                        '${langProvider.getText('wallpapers_count')} (${_favoriteWallpapers.length})',
                         style: TextStyle(
                           color: _selectedTabIndex == 0
                               ? Theme.of(context).colorScheme.primary
@@ -249,7 +175,7 @@ class _FavoritesTabState extends State<FavoritesTab> {
                     ),
                     child: Center(
                       child: Text(
-                        'Temalar (${_favoriteThemes.length})',
+                        '${langProvider.getText('themes_count')} (${_favoriteThemes.length})',
                         style: TextStyle(
                           color: _selectedTabIndex == 1
                               ? Theme.of(context).colorScheme.primary
@@ -278,18 +204,22 @@ class _FavoritesTabState extends State<FavoritesTab> {
 
   Widget _buildWallpapersGrid() {
     if (_favoriteWallpapers.isEmpty) {
-      return const Center(
-        child: Text('Henüz favori duvar kağıdı yok'),
+      final langProvider = Provider.of<LanguageProvider>(
+        context,
+        listen: false,
+      );
+      return Center(
+        child: Text(langProvider.getText('no_favorite_wallpapers')),
       );
     }
 
     return GridView.builder(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        childAspectRatio: 0.7,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.6,
       ),
       itemCount: _favoriteWallpapers.length,
       itemBuilder: (context, index) {
@@ -299,74 +229,38 @@ class _FavoritesTabState extends State<FavoritesTab> {
             await Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => WallpaperDetailScreen(
-                  wallpaper: wallpaper,
-                  index: index,
-                ),
+                builder: (context) =>
+                    WallpaperDetailScreen(wallpaper: wallpaper, index: index),
               ),
             );
             // Detay ekranından döndükten sonra favorileri yeniden yükle
             _loadFavorites();
           },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                CachedNetworkImage(
-                  imageUrl: wallpaper.imageUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    color: Colors.grey[800],
-                    child: const Center(
-                      child: CircularProgressIndicator(),
+          child: Card(
+            elevation: 8,
+            shadowColor: Colors.black.withOpacity(0.3),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CachedNetworkImage(
+                    imageUrl: wallpaper.imageUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      color: Colors.grey[800],
+                      child: const Center(child: CircularProgressIndicator()),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      color: Colors.grey[800],
+                      child: const Icon(Icons.error),
                     ),
                   ),
-                  errorWidget: (context, url, error) => Container(
-                    color: Colors.grey[800],
-                    child: const Icon(Icons.error),
-                  ),
-                ),
-                // Kategori etiketi
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      wallpaper.category,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                // Favori ikonu
-                Positioned(
-                  top: 8,
-                  left: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.favorite,
-                      color: Colors.red,
-                      size: 16,
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -376,18 +270,20 @@ class _FavoritesTabState extends State<FavoritesTab> {
 
   Widget _buildThemesGrid() {
     if (_favoriteThemes.isEmpty) {
-      return const Center(
-        child: Text('Henüz favori tema yok'),
+      final langProvider = Provider.of<LanguageProvider>(
+        context,
+        listen: false,
       );
+      return Center(child: Text(langProvider.getText('no_favorite_themes')));
     }
 
     return GridView.builder(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-        childAspectRatio: 0.75,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.6,
       ),
       itemCount: _favoriteThemes.length,
       itemBuilder: (context, index) {
@@ -402,40 +298,30 @@ class _FavoritesTabState extends State<FavoritesTab> {
             ).then((_) => _loadFavorites());
           },
           child: Card(
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: CachedNetworkImage(
-                    imageUrl: theme.previewImageUrl,
+            elevation: 8,
+            shadowColor: Colors.black.withOpacity(0.3),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CachedNetworkImage(
+                    imageUrl: theme.previewImage,
                     fit: BoxFit.cover,
-                    width: double.infinity,
                     placeholder: (context, url) => Container(
-                      color: Colors.grey[900],
-                      child: const Center(
-                        child: CircularProgressIndicator(),
-                      ),
+                      color: Colors.grey[800],
+                      child: const Center(child: CircularProgressIndicator()),
                     ),
                     errorWidget: (context, url, error) => Container(
-                      color: Colors.grey[900],
+                      color: Colors.grey[800],
                       child: const Icon(Icons.error),
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    theme.title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -443,4 +329,3 @@ class _FavoritesTabState extends State<FavoritesTab> {
     );
   }
 }
-

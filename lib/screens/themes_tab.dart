@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import '../models/theme_model.dart';
+import '../services/theme_service.dart';
+import '../services/language_service.dart';
 import 'theme_detail_screen.dart';
 
 class ThemesTab extends StatefulWidget {
@@ -11,102 +14,34 @@ class ThemesTab extends StatefulWidget {
 }
 
 class _ThemesTabState extends State<ThemesTab> {
-  String _selectedFilter = 'Tümü';
+  final ThemeService _themeService = ThemeService();
+  String _selectedFilterKey = 'all';
 
-  final List<String> _filters = [
-    'Tümü',
-    'Retro',
-    'Minimal',
-    'Neon',
-    'Modern',
-  ];
-
-  final List<ThemeModel> _allThemes = [
-    ThemeModel(
-      id: 't1',
-      title: 'Retro Vibes',
-      previewImageUrl: 'https://picsum.photos/id/200/300/400',
-      iconCount: 48,
-      isPremium: false,
-    ),
-    ThemeModel(
-      id: 't2',
-      title: 'Minimal Dark',
-      previewImageUrl: 'https://picsum.photos/id/201/300/400',
-      iconCount: 52,
-      isPremium: true,
-    ),
-    ThemeModel(
-      id: 't3',
-      title: 'Neon Nights',
-      previewImageUrl: 'https://picsum.photos/id/202/300/400',
-      iconCount: 60,
-      isPremium: false,
-    ),
-    ThemeModel(
-      id: 't4',
-      title: 'Modern Clean',
-      previewImageUrl: 'https://picsum.photos/id/203/300/400',
-      iconCount: 45,
-      isPremium: false,
-    ),
-    ThemeModel(
-      id: 't5',
-      title: 'Retro Gaming',
-      previewImageUrl: 'https://picsum.photos/id/204/300/400',
-      iconCount: 55,
-      isPremium: true,
-    ),
-    ThemeModel(
-      id: 't6',
-      title: 'Minimal Light',
-      previewImageUrl: 'https://picsum.photos/id/205/300/400',
-      iconCount: 50,
-      isPremium: false,
-    ),
-    ThemeModel(
-      id: 't7',
-      title: 'Neon Cyber',
-      previewImageUrl: 'https://picsum.photos/id/206/300/400',
-      iconCount: 58,
-      isPremium: true,
-    ),
-    ThemeModel(
-      id: 't8',
-      title: 'Modern Glass',
-      previewImageUrl: 'https://picsum.photos/id/207/300/400',
-      iconCount: 62,
-      isPremium: false,
-    ),
-    ThemeModel(
-      id: 't9',
-      title: 'Retro Wave',
-      previewImageUrl: 'https://picsum.photos/id/208/300/400',
-      iconCount: 47,
-      isPremium: false,
-    ),
-    ThemeModel(
-      id: 't10',
-      title: 'Minimal Pro',
-      previewImageUrl: 'https://picsum.photos/id/209/300/400',
-      iconCount: 65,
-      isPremium: true,
-    ),
-  ];
-
-  // Filtreleme fonksiyonu
-  List<ThemeModel> _getFilteredThemes() {
-    if (_selectedFilter == 'Tümü') {
-      return _allThemes;
-    }
-    return _allThemes
-        .where((theme) => theme.title.contains(_selectedFilter))
-        .toList();
+  // Kategori key'ini Firestore kategori değerine çevir
+  String _getCategoryFromKey(String key) {
+    final Map<String, String> categoryMap = {
+      'all': 'Tümü',
+      'retro': 'Retro',
+      'minimal': 'Minimal',
+      'neon': 'Neon',
+      'modern': 'Modern',
+    };
+    return categoryMap[key] ?? 'Tümü';
   }
 
   @override
   Widget build(BuildContext context) {
-    final filteredThemes = _getFilteredThemes();
+    final langProvider = Provider.of<LanguageProvider>(context);
+
+    final Map<String, String> filters = {
+      'all': langProvider.getText('all'),
+      'retro': langProvider.getText('retro'),
+      'minimal': langProvider.getText('minimal'),
+      'neon': langProvider.getText('neon'),
+      'modern': langProvider.getText('modern'),
+    };
+
+    final selectedCategory = _getCategoryFromKey(_selectedFilterKey);
 
     return Column(
       children: [
@@ -116,122 +51,156 @@ class _ThemesTabState extends State<ThemesTab> {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            itemCount: _filters.length,
+            itemCount: filters.length,
             itemBuilder: (context, index) {
-              final filter = _filters[index];
-              final isSelected = _selectedFilter == filter;
+              final filterKey = filters.keys.elementAt(index);
+              final filterName = filters[filterKey]!;
+              final isSelected = _selectedFilterKey == filterKey;
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: ChoiceChip(
-                  label: Text(filter),
+                  label: Text(filterName),
                   selected: isSelected,
                   onSelected: (selected) {
                     setState(() {
-                      _selectedFilter = filter;
+                      _selectedFilterKey = filterKey;
                     });
                   },
                   selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  backgroundColor: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest,
                 ),
               );
             },
           ),
         ),
-        // Grid View
+        // StreamBuilder ile real-time grid
         Expanded(
-          child: filteredThemes.isEmpty
-              ? const Center(
-                  child: Text(
-                    'Bu kategoride tema bulunamadı',
-                    style: TextStyle(fontSize: 16),
+          child: StreamBuilder<List<ThemeModel>>(
+            stream: _themeService.getThemesByCategoryStream(selectedCategory),
+            builder: (context, snapshot) {
+              // Loading state
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              // Error state
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Bir hata oluştu: ${snapshot.error}',
+                        style: const TextStyle(fontSize: 14),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
-                )
-              : GridView.builder(
-                  padding: const EdgeInsets.all(8),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                    childAspectRatio: 0.75,
-                  ),
-                  itemCount: filteredThemes.length,
-                  itemBuilder: (context, index) {
-                    final theme = filteredThemes[index];
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ThemeDetailScreen(theme: theme),
-                          ),
-                        );
-                      },
-                      child: Card(
-                        elevation: 4,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                );
+              }
+
+              // Empty state
+              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.palette_outlined,
+                        size: 80,
+                        color: Colors.grey.shade700,
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        selectedCategory == 'Tümü'
+                            ? 'Henüz tema eklenmemiş'
+                            : langProvider.getText('no_themes_found'),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
                         ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        selectedCategory == 'Tümü'
+                            ? 'Firebase Console\'dan themes koleksiyonuna\nveri ekleyin'
+                            : 'Bu kategoride henüz tema bulunmuyor',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              // Data state - Grid View
+              final themes = snapshot.data!;
+              return GridView.builder(
+                padding: const EdgeInsets.all(12),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.6,
+                ),
+                itemCount: themes.length,
+                itemBuilder: (context, index) {
+                  final theme = themes[index];
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ThemeDetailScreen(theme: theme),
+                        ),
+                      );
+                    },
+                    child: Card(
+                      elevation: 8,
+                      shadowColor: Colors.black.withOpacity(0.3),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: CachedNetworkImage(
-                                imageUrl: theme.previewImageUrl,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
-                                  color: Colors.grey[800],
-                                  child: const Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
+                            CachedNetworkImage(
+                              imageUrl: theme.previewImage,
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(
+                                color: Colors.grey[800],
+                                child: const Center(
+                                  child: CircularProgressIndicator(),
                                 ),
-                                errorWidget: (context, url, error) => Container(
-                                  color: Colors.grey[800],
-                                  child: const Icon(Icons.error),
-                                ),
+                              ),
+                              errorWidget: (context, url, error) => Container(
+                                color: Colors.grey[800],
+                                child: const Icon(Icons.error),
                               ),
                             ),
-                            // Premium Badge
-                            if (theme.isPremium)
-                              Positioned(
-                                top: 8,
-                                right: 8,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.amber,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.star,
-                                        size: 12,
-                                        color: Colors.black,
-                                      ),
-                                      SizedBox(width: 2),
-                                      Text(
-                                        'PRO',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.black,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
                           ],
                         ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
         ),
       ],
     );

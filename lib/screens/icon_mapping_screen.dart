@@ -1,21 +1,28 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:installed_apps/installed_apps.dart';
 import 'package:installed_apps/app_info.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
 import '../models/theme_model.dart';
+import '../services/theme_service.dart';
 import '../services/shortcut_service.dart';
+import '../services/language_service.dart';
+import '../utils/custom_snackbar.dart';
 
 class IconMappingScreen extends StatefulWidget {
   final ThemeModel theme;
+  final IconPackModel iconPack;
 
   const IconMappingScreen({
     super.key,
     required this.theme,
+    required this.iconPack,
   });
 
   @override
@@ -24,7 +31,10 @@ class IconMappingScreen extends StatefulWidget {
 
 class _IconMappingScreenState extends State<IconMappingScreen> {
   static const String _MAPPING_KEY_PREFIX = 'icon_map_';
-  
+  static const MethodChannel _channel = MethodChannel(
+    'com.example.app/shortcuts',
+  );
+
   // Her ikon için seçilen uygulama paket adını sakla
   final Map<String, String> _iconPackageMap = {};
   // Her ikon için seçilen uygulama adını sakla (gösterim için)
@@ -36,6 +46,24 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
   void initState() {
     super.initState();
     _loadSavedMappings();
+    _setupWidgetSuccessListener();
+  }
+
+  void _setupWidgetSuccessListener() {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'widgetAddedSuccess') {
+        if (mounted) {
+          final langProvider = Provider.of<LanguageProvider>(
+            context,
+            listen: false,
+          );
+          showCustomSnackBar(
+            langProvider.getText('icon_added_success'),
+            type: SnackBarType.success,
+          );
+        }
+      }
+    });
   }
 
   Future<void> _selectAppForIcon(String iconId) async {
@@ -43,9 +71,7 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
+      builder: (context) => const Center(child: CircularProgressIndicator()),
     );
 
     List<AppInfo> apps = [];
@@ -55,18 +81,20 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
         withIcon: true,
         excludeSystemApps: false,
       );
-      
+
       // Launcher aktivitesi olmayan uygulamaları filtrele (manuel filtreleme)
       apps = apps.where((app) => app.packageName != null).toList();
     } catch (e) {
       print('Uygulamalar alınamadı: $e');
       if (mounted) {
+        final langProvider = Provider.of<LanguageProvider>(
+          context,
+          listen: false,
+        );
         Navigator.pop(context); // Loading dialog'u kapat
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Uygulamalar yüklenemedi: $e'),
-            backgroundColor: Colors.red,
-          ),
+        showCustomSnackBar(
+          '${langProvider.getText('apps_loaded_error')}: $e',
+          type: SnackBarType.error,
         );
       }
       return;
@@ -77,11 +105,13 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
     }
 
     if (apps.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Hiç uygulama bulunamadı!'),
-          backgroundColor: Colors.orange,
-        ),
+      final langProvider = Provider.of<LanguageProvider>(
+        context,
+        listen: false,
+      );
+      showCustomSnackBar(
+        langProvider.getText('no_apps_found'),
+        type: SnackBarType.info,
       );
       return;
     }
@@ -111,9 +141,11 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Uygulama Seç',
-                      style: TextStyle(
+                    Text(
+                      Provider.of<LanguageProvider>(
+                        context,
+                      ).getText('select_app'),
+                      style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
@@ -144,7 +176,13 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
                               },
                             )
                           : const Icon(Icons.android, size: 40),
-                      title: Text(app.name ?? 'Bilinmeyen'),
+                      title: Text(
+                        app.name ??
+                            Provider.of<LanguageProvider>(
+                              context,
+                              listen: false,
+                            ).getText('unknown'),
+                      ),
                       onTap: () {
                         Navigator.pop(bottomSheetContext, app);
                       },
@@ -184,34 +222,63 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
     }
   }
 
-  // Kaydedilmiş eşleştirmeleri yükle
+  // Kaydedilmiş eşleştirmeleri yükle + Akıllı Otomatik Eşleştirme
   Future<void> _loadSavedMappings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
-      for (var icon in widget.theme.icons) {
-        final key = _MAPPING_KEY_PREFIX + icon.id;
+
+      for (var iconName in widget.iconPack.iconNames) {
+        final key = _MAPPING_KEY_PREFIX + iconName;
         final packageName = prefs.getString(key);
-        
+
+        // ADIM 1: Kullanıcının manuel seçimi var mı kontrol et
         if (packageName != null && packageName.isNotEmpty) {
           try {
             // Uygulama bilgilerini al
             final appInfo = await InstalledApps.getAppInfo(packageName);
-            
+
             if (appInfo != null) {
               setState(() {
-                _iconPackageMap[icon.id] = packageName;
-                _iconAppNameMap[icon.id] = appInfo.name ?? packageName;
-                
+                _iconPackageMap[iconName] = packageName;
+                _iconAppNameMap[iconName] = appInfo.name ?? packageName;
+
                 // İkonu yükle
                 if (appInfo.icon != null) {
-                  _iconAppIconMap[icon.id] = appInfo.icon!;
+                  _iconAppIconMap[iconName] = appInfo.icon!;
                 }
               });
-              print('Eşleştirme yüklendi: ${icon.id} -> $packageName');
+              print('Eşleştirme yüklendi (manuel): $iconName -> $packageName');
             }
           } catch (e) {
             print('Uygulama bilgisi alınamadı ($packageName): $e');
+          }
+        } else {
+          // ADIM 2 & 3: Manuel seçim yok, Akıllı Otomatik Eşleştirme dene
+          // İkon ismini paket adı olarak kullan
+          final potentialPackageName = iconName;
+          
+          try {
+            // Cihazda bu paket adıyla uygulama yüklü mü kontrol et
+            final appInfo = await InstalledApps.getAppInfo(potentialPackageName);
+
+            if (appInfo != null) {
+              // ADIM 3: Yüklü! Otomatik olarak eşleştir
+              setState(() {
+                _iconPackageMap[iconName] = potentialPackageName;
+                _iconAppNameMap[iconName] = appInfo.name ?? potentialPackageName;
+
+                // İkonu yükle
+                if (appInfo.icon != null) {
+                  _iconAppIconMap[iconName] = appInfo.icon!;
+                }
+              });
+              print('Otomatik eşleştirme başarılı: $iconName -> $potentialPackageName');
+            } else {
+              print('Otomatik eşleştirme yapılamadı: $iconName (uygulama yüklü değil)');
+            }
+          } catch (e) {
+            // Uygulama yüklü değil veya erişim hatası
+            print('Otomatik eşleştirme denemesi başarısız: $iconName -> $e');
           }
         }
       }
@@ -220,209 +287,178 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
     }
   }
 
-  Future<void> _applyIcon(ThemeIcon icon) async {
-    final packageName = _iconPackageMap[icon.id];
-    final appName = _iconAppNameMap[icon.id];
-    
+  Future<void> _applyIcon(String iconName, String iconUrl) async {
+    final langProvider = Provider.of<LanguageProvider>(context, listen: false);
+    final packageName = _iconPackageMap[iconName];
+    final appName = _iconAppNameMap[iconName];
+
     if (packageName == null || packageName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Lütfen önce bir uygulama seçin!'),
-          backgroundColor: Colors.orange,
-        ),
+      showCustomSnackBar(
+        langProvider.getText('select_app_first'),
+        type: SnackBarType.info,
       );
       return;
     }
-
-    // İkon indiriliyor mesajı
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('İkon indiriliyor...'),
-        duration: Duration(seconds: 3),
-      ),
-    );
 
     // İkon indirme işlemi
     File? iconFile;
     try {
       // İkon görselini indir
-      final response = await http.get(Uri.parse(icon.iconUrl));
-      
+      final response = await http.get(Uri.parse(iconUrl));
+
       if (response.statusCode != 200) {
-        throw Exception('İkon indirilemedi: HTTP ${response.statusCode}');
+        final langProvider = Provider.of<LanguageProvider>(
+          context,
+          listen: false,
+        );
+        throw Exception(langProvider.getText('icon_download_failed'));
       }
 
-      // Geçici dizine kaydet
-      final tempDir = await getTemporaryDirectory();
-      iconFile = File('${tempDir.path}/temp_icon_${icon.id}.png');
+      // KALICI dizine kaydet (getApplicationDocumentsDirectory kullan)
+      final appDir = await getApplicationDocumentsDirectory();
+      final iconsDir = Directory('${appDir.path}/widget_icons');
+      if (!await iconsDir.exists()) {
+        await iconsDir.create(recursive: true);
+      }
+
+      iconFile = File(
+        '${iconsDir.path}/widget_icon_${DateTime.now().millisecondsSinceEpoch}.png',
+      );
       await iconFile.writeAsBytes(response.bodyBytes);
 
-      print('İkon başarıyla indirildi: ${iconFile.path}');
+      print('İkon başarıyla kalıcı dizine kaydedildi: ${iconFile.path}');
     } catch (e) {
       print('İkon indirme hatası: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('İkon indirilemedi: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
       return;
     }
 
-    // Kısayol oluşturma mesajı
-    if (mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Kısayol Oluşturuluyor...'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
-
-    // ShortcutService kullanarak kısayol oluştur
+    // ShortcutService kullanarak WIDGET oluştur (ROZET YOK!)
     final shortcutService = ShortcutService();
-    final success = await shortcutService.createAppShortcut(
+    await shortcutService.createAppWidget(
       appName: appName ?? packageName,
       packageName: packageName,
       iconPath: iconFile.path,
     );
 
-    // Geçici dosyayı sil (başarılı veya başarısız olsun)
-    try {
-      if (iconFile.existsSync()) {
-        await iconFile.delete();
-        print('Geçici ikon dosyası silindi');
-      }
-    } catch (e) {
-      print('Geçici dosya silinemedi: $e');
-    }
+    // NOT: İkon dosyasını SİLME! Widget'ın buna ihtiyacı var.
+    // Dosya kalıcı dizinde kalacak.
+    print('İkon dosyası widget için saklandı: ${iconFile.path}');
 
-    // Sonuç mesajı
-    if (mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success
-                ? 'Simge başarıyla uygulandı!'
-                : 'Simge uygulanamadı.',
-          ),
-          duration: const Duration(seconds: 2),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
-    }
+    // Başarı mesajı Android callback'ten gelecek (kullanıcı "Add" seçerse)
   }
 
   @override
   Widget build(BuildContext context) {
+    final langProvider = Provider.of<LanguageProvider>(context);
     return Scaffold(
-      appBar: AppBar(
-        title: Text('${widget.theme.title} - Simge Eşleştirme'),
-      ),
-      body: widget.theme.icons.isEmpty
-          ? const Center(
-              child: Text('Bu temada simge bulunmuyor'),
-            )
+      appBar: AppBar(title: Text(langProvider.getText('icon_mapping_title'))),
+      body: widget.iconPack.icons.isEmpty
+          ? Center(child: Text(langProvider.getText('no_icons_in_theme')))
           : ListView.builder(
-              itemCount: widget.theme.icons.length,
+              itemCount: widget.iconPack.iconCount,
               itemBuilder: (context, index) {
-                final icon = widget.theme.icons[index];
-                final selectedPackage = _iconPackageMap[icon.id];
-                final selectedAppName = _iconAppNameMap[icon.id];
-                final selectedAppIcon = _iconAppIconMap[icon.id];
+                final iconName = widget.iconPack.iconNames[index];
+                final iconUrl = widget.iconPack.icons[iconName]!;
+                final selectedPackage = _iconPackageMap[iconName];
+                final selectedAppName = _iconAppNameMap[iconName];
+                final selectedAppIcon = _iconAppIconMap[iconName];
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    // Simge görseli
-                    leading: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: CachedNetworkImage(
-                        imageUrl: icon.iconUrl,
-                        width: 50,
-                        height: 50,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          width: 50,
-                          height: 50,
-                          color: Colors.grey[800],
-                          child: const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          width: 50,
-                          height: 50,
-                          color: Colors.grey[800],
-                          child: const Icon(Icons.error, size: 20),
-                        ),
-                      ),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
                     ),
-                    // Simge adı
-                    title: Text(
-                      icon.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: selectedAppName == null
-                        ? const Text(
-                            'Uygulama seçilmedi',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                            ),
-                          )
-                        : null,
-                    // Düğmeler
-                    trailing: SizedBox(
-                      width: 200,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          // Uygulama Seç
-                          Expanded(
-                            child: SizedBox(
-                              height: 40,
-                              child: OutlinedButton(
-                                onPressed: () => _selectAppForIcon(icon.id),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                ),
-                                child: selectedAppIcon != null
-                                    ? Image.memory(
-                                        selectedAppIcon,
-                                        width: 24,
-                                        height: 24,
-                                        errorBuilder: (context, error, stackTrace) {
-                                          return const Text('Seç');
-                                        },
-                                      )
-                                    : const Text('Seç'),
+                    child: Row(
+                      children: [
+                        // Simge görseli (Sol)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: CachedNetworkImage(
+                            imageUrl: iconUrl,
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(
+                              width: 56,
+                              height: 56,
+                              color: Colors.grey[800],
+                              child: const Center(
+                                child: CircularProgressIndicator(strokeWidth: 2),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Simgeyi Uygula
-                          Expanded(
-                            child: SizedBox(
-                              height: 40,
-                              child: ElevatedButton(
-                                onPressed: () => _applyIcon(icon),
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                ),
-                                child: const Text('Uygula'),
-                              ),
+                            errorWidget: (context, url, error) => Container(
+                              width: 56,
+                              height: 56,
+                              color: Colors.grey[800],
+                              child: const Icon(Icons.error, size: 24),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 16),
+                        // Butonlar (Sağ)
+                        Expanded(
+                          child: Row(
+                            children: [
+                              // Uygulama Seç Butonu
+                              Expanded(
+                                child: SizedBox(
+                                  height: 56,
+                                  child: OutlinedButton(
+                                    onPressed: () => _selectAppForIcon(iconName),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                    ),
+                                    child: selectedAppIcon != null
+                                        ? Image.memory(
+                                            selectedAppIcon,
+                                            width: 40,
+                                            height: 40,
+                                            errorBuilder:
+                                                (context, error, stackTrace) {
+                                                  return Text(
+                                                    langProvider.getText(
+                                                      'select_app',
+                                                    ),
+                                                  );
+                                                },
+                                          )
+                                        : Text(
+                                            langProvider.getText('select_app'),
+                                            style: const TextStyle(fontSize: 13),
+                                          ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              // Simgeyi Uygula Butonu
+                              Expanded(
+                                child: SizedBox(
+                                  height: 56,
+                                  child: ElevatedButton(
+                                    onPressed: () => _applyIcon(iconName, iconUrl),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      langProvider.getText('apply'),
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 );

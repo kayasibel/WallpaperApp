@@ -1,12 +1,15 @@
+﻿import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../models/wallpaper_model.dart';
-import '../services/favorite_service.dart';
-import 'package:wallpaper_theme_app/services/download_service.dart';
+import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
-import 'package:wallpaper_manager_plus/wallpaper_manager_plus.dart';
+import '../models/wallpaper_model.dart';
+import '../services/favorite_service.dart';
+import '../services/download_service.dart';
+import '../services/language_service.dart';
 
 class WallpaperDetailScreen extends StatefulWidget {
   final WallpaperModel wallpaper;
@@ -25,6 +28,7 @@ class WallpaperDetailScreen extends StatefulWidget {
 class _WallpaperDetailScreenState extends State<WallpaperDetailScreen> {
   final FavoriteService _favoriteService = FavoriteService();
   final DownloadService _downloadService = DownloadService();
+  bool _showUI = true;
   bool _isFavorite = false;
   bool _isLoading = true;
 
@@ -45,182 +49,231 @@ class _WallpaperDetailScreenState extends State<WallpaperDetailScreen> {
 
   // Favori durumunu değiştir
   Future<void> _toggleFavorite() async {
-    final newStatus = await _favoriteService.toggleFavorite(widget.wallpaper.id);
+    final newStatus = await _favoriteService.toggleFavorite(
+      widget.wallpaper.id,
+    );
     setState(() {
       _isFavorite = newStatus;
     });
-
-    // Kullanıcıya bilgi ver
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _isFavorite ? 'Favorilere eklendi' : 'Favorilerden çıkarıldı',
-          ),
-          duration: const Duration(seconds: 1),
-        ),
-      );
-    }
   }
 
   // Duvar kağıdını indir
   Future<void> _downloadWallpaper() async {
-    // İndiriliyor mesajı göster
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('İndiriliyor...'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    }
-
-    // İndirme işlemini başlat
     final success = await _downloadService.downloadAndSaveWallpaper(
       widget.wallpaper.imageUrl,
     );
 
-    // Sonuç mesajını göster
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success 
-              ? 'İndirme Başarılı!' 
-              : 'İndirme Başarısız! (İzin Gerekli)',
-          ),
-          duration: const Duration(seconds: 2),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
+    if (!success && mounted) {
+      // Sadece başarısız olursa sessizce geç
+      // TODO: İsteğe bağlı olarak bir geri bildirim eklenebilir
     }
   }
 
-  // Duvar kağıdını uygula
   Future<void> _applyWallpaper() async {
     try {
-      // Başlangıç mesajı
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Duvar Kağıdı Ayarlanıyor...'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
 
-      // 1. Resmi http ile indir
       final response = await http.get(Uri.parse(widget.wallpaper.imageUrl));
-      if (response.statusCode != 200) {
-        throw Exception('Resim indirilemedi: ${response.statusCode}');
-      }
+      final langProvider = Provider.of<LanguageProvider>(
+        context,
+        listen: false,
+      );
+      if (response.statusCode != 200)
+        throw Exception(langProvider.getText('image_download_failed'));
 
-      // 2. Geçici dizine kaydet
       final tempDir = await getTemporaryDirectory();
       final file = File('${tempDir.path}/wallpaper_${widget.wallpaper.id}.jpg');
       await file.writeAsBytes(response.bodyBytes);
 
-      // 3. Duvar kağıdını ayarla
-      await WallpaperManagerPlus().setWallpaper(
-        file,
-        WallpaperManagerPlus.homeScreen,
-      );
+      const platform = MethodChannel('com.example.app/wallpaper');
+      await platform.invokeMethod('openWallpaperIntent', {
+        'imagePath': file.path,
+      });
 
-      // 4. Başarı mesajı
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Duvar Kağıdı Başarıyla Ayarlandı!'),
-            duration: Duration(seconds: 2),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      // Hata mesajı
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Duvar Kağıdı Ayarlama Başarısız oldu! (İzin veya Dosya Hatası)'),
-            duration: Duration(seconds: 2),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final langProvider = Provider.of<LanguageProvider>(context);
+    final statusBarHeight = MediaQuery.of(context).padding.top;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.wallpaper.title),
-        actions: [
-          _isLoading
-              ? const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              : IconButton(
-                  icon: Icon(
-                    _isFavorite ? Icons.favorite : Icons.favorite_border,
-                    color: _isFavorite ? Colors.red : null,
-                  ),
-                  onPressed: _toggleFavorite,
-                ),
-          IconButton(
-            icon: const Icon(Icons.download),
-            onPressed: _downloadWallpaper,
-          ),
-          IconButton(
-            icon: const Icon(Icons.wallpaper),
-            onPressed: _applyWallpaper,
-            tooltip: 'Duvar Kağıdı Olarak Ayarla',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Center(
+      backgroundColor: Colors.black,
+      body: GestureDetector(
+        onTap: () => setState(() => _showUI = !_showUI),
+        child: Stack(
+          children: [
+            // 1. KATMAN: TAM EKRAN GÖRSEL
+            Positioned.fill(
               child: Hero(
                 tag: 'wallpaper_${widget.index}',
                 child: CachedNetworkImage(
                   imageUrl: widget.wallpaper.imageUrl,
-                  fit: BoxFit.contain,
-                  placeholder: (context, url) => const CircularProgressIndicator(),
-                  errorWidget: (context, url, error) => const Icon(
-                    Icons.error,
-                    size: 48,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
+                  errorWidget: (context, url, error) =>
+                      const Icon(Icons.error, color: Colors.white),
+                ),
+              ),
+            ),
+
+            // 2. KATMAN: GERİ BUTONU (SOL ÜST)
+            Positioned(
+              top: statusBarHeight + 10,
+              left: 20,
+              child: AnimatedOpacity(
+                opacity: _showUI ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: ClipOval(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      width: 45,
+                      height: 45,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.3),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.arrow_back,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        onPressed: _showUI
+                            ? () => Navigator.pop(context)
+                            : null,
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.wallpaper.title,
-                  style: Theme.of(context).textTheme.titleLarge,
+
+            // 3. KATMAN: ALT PANEL (BLUR + BUTON)
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeOutCubic,
+              bottom: _showUI ? (bottomPadding + 30) : -150,
+              left: 20,
+              right: 20,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(32),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.4),
+                      borderRadius: BorderRadius.circular(32),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // SOL: FAVORİ BUTONU
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: _toggleFavorite,
+                            borderRadius: BorderRadius.circular(24),
+                            splashColor: Colors.white.withOpacity(0.3),
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _isFavorite
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
+                                color: _isFavorite ? Colors.red : Colors.white,
+                                size: 22,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        // ORTA: UYGULA BUTONU
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _applyWallpaper,
+                                borderRadius: BorderRadius.circular(24),
+                                splashColor: Colors.white.withOpacity(0.3),
+                                child: Container(
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      langProvider.getText('apply'),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 1.2,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        // SAĞ: İNDİRME BUTONU
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: _downloadWallpaper,
+                            borderRadius: BorderRadius.circular(24),
+                            splashColor: Colors.white.withOpacity(0.3),
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.download_rounded,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Chip(
-                  label: Text(widget.wallpaper.category),
-                  avatar: const Icon(Icons.category, size: 16),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
