@@ -135,7 +135,7 @@ class _FavoritesTabState extends State<FavoritesTab> {
                           color: _selectedTabIndex == 0
                               ? Theme.of(context).colorScheme.primary
                               : Colors.transparent,
-                          width: 2,
+                          width: 0.5,
                         ),
                       ),
                     ),
@@ -169,7 +169,7 @@ class _FavoritesTabState extends State<FavoritesTab> {
                           color: _selectedTabIndex == 1
                               ? Theme.of(context).colorScheme.primary
                               : Colors.transparent,
-                          width: 2,
+                          width: 0.5,
                         ),
                       ),
                     ),
@@ -214,12 +214,12 @@ class _FavoritesTabState extends State<FavoritesTab> {
     }
 
     return GridView.builder(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(4),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.6,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: 0.5,
       ),
       itemCount: _favoriteWallpapers.length,
       itemBuilder: (context, index) {
@@ -236,30 +236,27 @@ class _FavoritesTabState extends State<FavoritesTab> {
             // Detay ekranından döndükten sonra favorileri yeniden yükle
             _loadFavorites();
           },
-          child: Card(
-            elevation: 8,
-            shadowColor: Colors.black.withOpacity(0.3),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: Colors.grey.withOpacity(0.2),
+                width: 0.5,
+              ),
+              borderRadius: BorderRadius.circular(20),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedNetworkImage(
-                    imageUrl: wallpaper.imageUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      color: Colors.grey[800],
-                      child: const Center(child: CircularProgressIndicator()),
-                    ),
-                    errorWidget: (context, url, error) => Container(
-                      color: Colors.grey[800],
-                      child: const Icon(Icons.error),
-                    ),
-                  ),
-                ],
+              borderRadius: BorderRadius.circular(20),
+              child: CachedNetworkImage(
+                imageUrl: wallpaper.imageUrl,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => Container(
+                  color: Colors.grey[800],
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  color: Colors.grey[800],
+                  child: const Icon(Icons.error),
+                ),
               ),
             ),
           ),
@@ -278,12 +275,12 @@ class _FavoritesTabState extends State<FavoritesTab> {
     }
 
     return GridView.builder(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(4),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.6,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        childAspectRatio: 0.5,
       ),
       itemCount: _favoriteThemes.length,
       itemBuilder: (context, index) {
@@ -297,30 +294,27 @@ class _FavoritesTabState extends State<FavoritesTab> {
               ),
             ).then((_) => _loadFavorites());
           },
-          child: Card(
-            elevation: 8,
-            shadowColor: Colors.black.withOpacity(0.3),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: Colors.grey.withOpacity(0.2),
+                width: 0.5,
+              ),
+              borderRadius: BorderRadius.circular(20),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedNetworkImage(
-                    imageUrl: theme.previewImage,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      color: Colors.grey[800],
-                      child: const Center(child: CircularProgressIndicator()),
-                    ),
-                    errorWidget: (context, url, error) => Container(
-                      color: Colors.grey[800],
-                      child: const Icon(Icons.error),
-                    ),
-                  ),
-                ],
+              borderRadius: BorderRadius.circular(20),
+              child: CachedNetworkImage(
+                imageUrl: theme.previewImage,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => Container(
+                  color: Colors.grey[800],
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  color: Colors.grey[800],
+                  child: const Icon(Icons.error),
+                ),
               ),
             ),
           ),

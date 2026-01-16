@@ -10,6 +10,7 @@ import '../models/wallpaper_model.dart';
 import '../services/favorite_service.dart';
 import '../services/download_service.dart';
 import '../services/language_service.dart';
+import '../utils/custom_snackbar.dart';
 
 class WallpaperDetailScreen extends StatefulWidget {
   final WallpaperModel wallpaper;
@@ -59,13 +60,38 @@ class _WallpaperDetailScreenState extends State<WallpaperDetailScreen> {
 
   // Duvar kağıdını indir
   Future<void> _downloadWallpaper() async {
+    final langProvider = Provider.of<LanguageProvider>(
+      context,
+      listen: false,
+    );
+    
+    // Loading göster
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+    
     final success = await _downloadService.downloadAndSaveWallpaper(
       widget.wallpaper.imageUrl,
     );
 
-    if (!success && mounted) {
-      // Sadece başarısız olursa sessizce geç
-      // TODO: İsteğe bağlı olarak bir geri bildirim eklenebilir
+    // Loading kapat
+    if (mounted) Navigator.pop(context);
+
+    // Kullanıcıya feedback ver
+    if (mounted) {
+      if (success) {
+        showCustomSnackBar(
+          langProvider.getText('wallpaper_downloaded'),
+          type: SnackBarType.success,
+        );
+      } else {
+        showCustomSnackBar(
+          langProvider.getText('download_failed'),
+          type: SnackBarType.error,
+        );
+      }
     }
   }
 
@@ -82,8 +108,9 @@ class _WallpaperDetailScreenState extends State<WallpaperDetailScreen> {
         context,
         listen: false,
       );
-      if (response.statusCode != 200)
+      if (response.statusCode != 200) {
         throw Exception(langProvider.getText('image_download_failed'));
+      }
 
       final tempDir = await getTemporaryDirectory();
       final file = File('${tempDir.path}/wallpaper_${widget.wallpaper.id}.jpg');

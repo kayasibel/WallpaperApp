@@ -43,3 +43,24 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Release signing keys - NEVER COMMIT THESE!
+**/key.properties
+**/keystore/*.jks
+**/keystore/*.keystore
+
+# Firebase - Sensitive data (optional - depends on your setup)
+# Uncomment if you don't want to share Firebase config publicly:
+# **/google-services.json
+# **/GoogleService-Info.plist
+
+# Local configuration file (SDK path, etc.)
+android/local.properties
+
+# Gradle files (contains local paths)
+.gradle
+android/.gradle/
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/gradle/wrapper/gradle-wrapper.jar

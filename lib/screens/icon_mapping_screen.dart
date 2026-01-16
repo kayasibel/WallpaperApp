@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -10,7 +9,6 @@ import 'package:installed_apps/app_info.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../models/theme_model.dart';
-import '../services/theme_service.dart';
 import '../services/shortcut_service.dart';
 import '../services/language_service.dart';
 import '../utils/custom_snackbar.dart';
@@ -42,11 +40,16 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
   // Her ikon için seçilen uygulamanın ikon verisini sakla
   final Map<String, Uint8List> _iconAppIconMap = {};
 
+  // Uygulama listesi cache (performans için)
+  List<AppInfo>? _cachedApps;
+  bool _isLoadingApps = false;
+
   @override
   void initState() {
     super.initState();
     _loadSavedMappings();
     _setupWidgetSuccessListener();
+    _loadAppsInBackground(); // Uygulamaları arka planda yükle
   }
 
   void _setupWidgetSuccessListener() {
@@ -66,45 +69,70 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
     });
   }
 
-  Future<void> _selectAppForIcon(String iconId) async {
-    // Yükleniyor göstergesi
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
+  // Uygulamaları arka planda yükle (cache için)
+  Future<void> _loadAppsInBackground() async {
+    if (_isLoadingApps || _cachedApps != null) return;
+    
+    setState(() {
+      _isLoadingApps = true;
+    });
 
-    List<AppInfo> apps = [];
     try {
-      // Kurulu uygulamaları al (ikonlar ve sistem uygulamaları dahil)
-      apps = await InstalledApps.getInstalledApps(
+      final apps = await InstalledApps.getInstalledApps(
         withIcon: true,
         excludeSystemApps: false,
       );
 
-      // Launcher aktivitesi olmayan uygulamaları filtrele (manuel filtreleme)
-      apps = apps.where((app) => app.packageName != null).toList();
-    } catch (e) {
-      print('Uygulamalar alınamadı: $e');
+      // Launcher aktivitesi olmayan uygulamaları filtrele
+      final filteredApps = apps.where((app) => app.packageName != null).toList();
+      
+      // Alfabetik sırala
+      filteredApps.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
+
       if (mounted) {
-        final langProvider = Provider.of<LanguageProvider>(
-          context,
-          listen: false,
-        );
-        Navigator.pop(context); // Loading dialog'u kapat
-        showCustomSnackBar(
-          '${langProvider.getText('apps_loaded_error')}: $e',
-          type: SnackBarType.error,
-        );
+        setState(() {
+          _cachedApps = filteredApps;
+          _isLoadingApps = false;
+        });
       }
-      return;
+    } catch (e) {
+      print('Uygulamalar yüklenemedi: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingApps = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _selectAppForIcon(String iconId) async {
+    // Eğer uygulamalar henüz yüklenmediyse loading göster
+    if (_cachedApps == null) {
+      if (_isLoadingApps) {
+        // Zaten yükleniyorsa dialog göster
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(child: CircularProgressIndicator()),
+        );
+        
+        // Yüklenene kadar bekle
+        while (_cachedApps == null && _isLoadingApps) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+        
+        if (mounted) {
+          Navigator.pop(context); // Loading dialog'u kapat
+        }
+      } else {
+        // Yüklenmeye başlanılmamışsa şimdi yükle
+        await _loadAppsInBackground();
+      }
     }
 
-    if (mounted) {
-      Navigator.pop(context); // Loading dialog'u kapat
-    }
-
-    if (apps.isEmpty) {
+    final apps = _cachedApps;
+    
+    if (apps == null || apps.isEmpty) {
       final langProvider = Provider.of<LanguageProvider>(
         context,
         listen: false,
@@ -116,10 +144,7 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
       return;
     }
 
-    // Uygulamaları alfabetik sırala
-    apps.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
-
-    // BottomSheet ile uygulama listesi göster
+    // BottomSheet ile uygulama listesi göster (cache'ten)
     if (mounted) {
       final selectedApp = await showModalBottomSheet<AppInfo>(
         context: context,

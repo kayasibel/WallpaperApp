@@ -3,7 +3,7 @@
     android:minWidth="40dp"
     android:minHeight="40dp"
     android:updatePeriodMillis="0"
-    android:previewImage="@drawable/frank"
+    android:previewImage="@drawable/ic_blank"
     android:initialLayout="@layout/widget_icon"
     android:resizeMode="none"
     android:widgetCategory="home_screen">

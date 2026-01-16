@@ -5,39 +5,48 @@
     android:orientation="vertical"
     android:gravity="center"
     android:padding="2dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="2dp"
     android:background="@android:color/transparent">
     
-    <!-- İkon Görseli - Şeffaf arka plan, minimal padding -->
+    <!-- İkon Görseli - Esnek-Limitli (Adaptive Constrained) -->
     <ImageView
         android:id="@+id/widget_icon"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:padding="2dp"
-        android:scaleType="fitCenter"
+        android:maxWidth="58dp"
+        android:maxHeight="58dp"
+        android:scaleType="centerInside"
         android:adjustViewBounds="true"
         android:visibility="visible"
-        android:layout_marginBottom="4dp"
         android:contentDescription="App Icon" />
     
+    <!-- Uygulama İsmi - Geniş Alan (Full Width) -->
     <TextView
         android:id="@+id/widget_app_name"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="4dp"
+        android:layout_marginStart="0dp"
+        android:layout_marginEnd="0dp"
+        android:layout_marginLeft="0dp"
+        android:layout_marginRight="0dp"
+        android:paddingStart="0dp"
+        android:paddingEnd="0dp"
+        android:paddingLeft="0dp"
+        android:paddingRight="0dp"
         android:textColor="#FFFFFF"
-        android:textSize="12sp"
-        android:fontFamily="sans-serif-medium"
+        android:textSize="11sp"
+        android:fontFamily="sans-serif"
         android:letterSpacing="0.05"
         android:maxLines="1"
+        android:singleLine="true"
         android:ellipsize="end"
-        android:shadowColor="#80000000"
+        android:shadowColor="#D9000000"
         android:shadowDx="1.2"
         android:shadowDy="1.2"
-        android:shadowRadius="3.0"
-        android:gravity="center"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp" />
+        android:shadowRadius="4.0"
+        android:gravity="center_horizontal" />
         
 </LinearLayout>

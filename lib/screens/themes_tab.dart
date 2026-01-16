@@ -15,70 +15,13 @@ class ThemesTab extends StatefulWidget {
 
 class _ThemesTabState extends State<ThemesTab> {
   final ThemeService _themeService = ThemeService();
-  String _selectedFilterKey = 'all';
-
-  // Kategori key'ini Firestore kategori değerine çevir
-  String _getCategoryFromKey(String key) {
-    final Map<String, String> categoryMap = {
-      'all': 'Tümü',
-      'retro': 'Retro',
-      'minimal': 'Minimal',
-      'neon': 'Neon',
-      'modern': 'Modern',
-    };
-    return categoryMap[key] ?? 'Tümü';
-  }
 
   @override
   Widget build(BuildContext context) {
     final langProvider = Provider.of<LanguageProvider>(context);
 
-    final Map<String, String> filters = {
-      'all': langProvider.getText('all'),
-      'retro': langProvider.getText('retro'),
-      'minimal': langProvider.getText('minimal'),
-      'neon': langProvider.getText('neon'),
-      'modern': langProvider.getText('modern'),
-    };
-
-    final selectedCategory = _getCategoryFromKey(_selectedFilterKey);
-
-    return Column(
-      children: [
-        // Filtre Çipleri
-        SizedBox(
-          height: 60,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            itemCount: filters.length,
-            itemBuilder: (context, index) {
-              final filterKey = filters.keys.elementAt(index);
-              final filterName = filters[filterKey]!;
-              final isSelected = _selectedFilterKey == filterKey;
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: ChoiceChip(
-                  label: Text(filterName),
-                  selected: isSelected,
-                  onSelected: (selected) {
-                    setState(() {
-                      _selectedFilterKey = filterKey;
-                    });
-                  },
-                  selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                  backgroundColor: Theme.of(
-                    context,
-                  ).colorScheme.surfaceContainerHighest,
-                ),
-              );
-            },
-          ),
-        ),
-        // StreamBuilder ile real-time grid
-        Expanded(
-          child: StreamBuilder<List<ThemeModel>>(
-            stream: _themeService.getThemesByCategoryStream(selectedCategory),
+    return StreamBuilder<List<ThemeModel>>(
+            stream: _themeService.getThemesByCategoryStream('Tümü'),
             builder: (context, snapshot) {
               // Loading state
               if (snapshot.connectionState == ConnectionState.waiting) {
@@ -120,9 +63,7 @@ class _ThemesTabState extends State<ThemesTab> {
                       ),
                       const SizedBox(height: 24),
                       Text(
-                        selectedCategory == 'Tümü'
-                            ? 'Henüz tema eklenmemiş'
-                            : langProvider.getText('no_themes_found'),
+                        'Henüz tema eklenmemiş',
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w500,
@@ -131,9 +72,7 @@ class _ThemesTabState extends State<ThemesTab> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        selectedCategory == 'Tümü'
-                            ? 'Firebase Console\'dan themes koleksiyonuna\nveri ekleyin'
-                            : 'Bu kategoride henüz tema bulunmuyor',
+                        'Firebase Console\'dan themes koleksiyonuna\nveri ekleyin',
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.grey.shade600,
@@ -148,12 +87,12 @@ class _ThemesTabState extends State<ThemesTab> {
               // Data state - Grid View
               final themes = snapshot.data!;
               return GridView.builder(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(4),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 0.6,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
+                  childAspectRatio: 0.5,
                 ),
                 itemCount: themes.length,
                 itemBuilder: (context, index) {
@@ -167,32 +106,29 @@ class _ThemesTabState extends State<ThemesTab> {
                         ),
                       );
                     },
-                    child: Card(
-                      elevation: 8,
-                      shadowColor: Colors.black.withOpacity(0.3),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: Colors.grey.withOpacity(0.2),
+                          width: 0.5,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            CachedNetworkImage(
-                              imageUrl: theme.previewImage,
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(
-                                color: Colors.grey[800],
-                                child: const Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              ),
-                              errorWidget: (context, url, error) => Container(
-                                color: Colors.grey[800],
-                                child: const Icon(Icons.error),
-                              ),
+                        borderRadius: BorderRadius.circular(20),
+                        child: CachedNetworkImage(
+                          imageUrl: theme.previewImage,
+                          fit: BoxFit.cover,
+                          placeholder: (context, url) => Container(
+                            color: Colors.grey[800],
+                            child: const Center(
+                              child: CircularProgressIndicator(),
                             ),
-                          ],
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            color: Colors.grey[800],
+                            child: const Icon(Icons.error),
+                          ),
                         ),
                       ),
                     ),
@@ -200,9 +136,6 @@ class _ThemesTabState extends State<ThemesTab> {
                 },
               );
             },
-          ),
-        ),
-      ],
-    );
+          );
   }
 }

@@ -140,8 +140,8 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
                 imageUrl: CloudinaryHelper.getDetailOptimized(
                   widget.theme.previewImage,
                 ),
-                fit: BoxFit.cover,
-                alignment: Alignment.topCenter,
+                fit: BoxFit.contain,
+                alignment: Alignment.center,
                 placeholder: (context, url) => const Center(
                   child: CircularProgressIndicator(color: Colors.white),
                 ),

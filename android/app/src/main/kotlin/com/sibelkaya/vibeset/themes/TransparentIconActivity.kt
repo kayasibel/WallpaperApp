@@ -1,4 +1,4 @@
-package com.example.wallpaper_theme_app
+package com.sibelkaya.vibeset.themes
 
 class TransparentIconActivity : android.app.Activity() {
     override fun onCreate(savedInstanceState: android.os.Bundle?) {

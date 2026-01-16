@@ -1,6 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 import '../services/language_service.dart';
 import '../utils/custom_snackbar.dart';
 
@@ -319,7 +321,7 @@ class SettingsScreen extends StatelessWidget {
                         langProvider,
                       ),
                     );
-                  }).toList(),
+                  }),
                   const SizedBox(height: 8),
                 ],
               ),
@@ -453,26 +455,59 @@ class SettingsScreen extends StatelessWidget {
   }
 
   // Uygulama değerlendirme
-  void _rateApp(BuildContext context, LanguageProvider langProvider) {
-    showCustomSnackBar(
-      langProvider.getText('opening_store'),
-      type: SnackBarType.info,
-    );
+  void _rateApp(BuildContext context, LanguageProvider langProvider) async {
+    final url = Uri.parse('https://play.google.com/store/apps/details?id=com.sibelkaya.vibeset.themes');
+    
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        showCustomSnackBar(
+          langProvider.getText('cannot_open_link'),
+          type: SnackBarType.error,
+        );
+      }
+    } catch (e) {
+      showCustomSnackBar(
+        langProvider.getText('error_opening_link'),
+        type: SnackBarType.error,
+      );
+    }
   }
 
   // Uygulamayı paylaş
-  void _shareApp(BuildContext context, LanguageProvider langProvider) {
-    showCustomSnackBar(
-      langProvider.getText('share_message'),
-      type: SnackBarType.info,
-    );
+  void _shareApp(BuildContext context, LanguageProvider langProvider) async {
+    const appUrl = 'https://play.google.com/store/apps/details?id=com.sibelkaya.vibeset.themes';
+    final shareText = '${langProvider.getText('check_out_app')}\n$appUrl';
+    
+    try {
+      await Share.share(shareText);
+    } catch (e) {
+      showCustomSnackBar(
+        langProvider.getText('error_sharing'),
+        type: SnackBarType.error,
+      );
+    }
   }
 
   // Gizlilik politikası
-  void _openPrivacyPolicy(BuildContext context, LanguageProvider langProvider) {
-    showCustomSnackBar(
-      langProvider.getText('opening_privacy'),
-      type: SnackBarType.info,
-    );
+  void _openPrivacyPolicy(BuildContext context, LanguageProvider langProvider) async {
+    final url = Uri.parse('https://gist.githubusercontent.com/kayasibel/398f09b1ceb5873479eb51fddd7b6aa7/raw/0555975cbd22f7aab1a7c4f41f3efe4c8d712b4f/privacy-policy.md');
+    
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        showCustomSnackBar(
+          langProvider.getText('cannot_open_link'),
+          type: SnackBarType.error,
+        );
+      }
+    } catch (e) {
+      showCustomSnackBar(
+        langProvider.getText('error_opening_link'),
+        type: SnackBarType.error,
+      );
+    }
   }
 }
