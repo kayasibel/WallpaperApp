@@ -39,11 +39,11 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyC2MNKilBBRrGe5iLTRwZ2XItDmm5xO5bw',
-    appId: '1:932174522384:android:9884fb5d04209ce8eac295',
-    messagingSenderId: '932174522384',
-    projectId: 'wallpaper-app-3c8c6',
-    storageBucket: 'wallpaper-app-3c8c6.firebasestorage.app',
+    apiKey: 'AIzaSyBTF9YC4p2wbnzWlaMJ6Qg73IEdyxNmAJk',
+    appId: '1:47010221246:android:bc1e8b6320c2de54f9a2ef',
+    messagingSenderId: '47010221246',
+    projectId: 'anime-wallpaper-1fd27',
+    storageBucket: 'anime-wallpaper-1fd27.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(

@@ -27,12 +27,19 @@ class IconPackModel {
   factory IconPackModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>?;
 
+    print('📦 IconPack document ID: ${doc.id}');
+    print('📦 IconPack data keys: ${data?.keys.toList()}');
+
     if (data == null) {
+      print('❌ IconPack data is null!');
       return IconPackModel(id: doc.id, packName: '', icons: {});
     }
 
-    // icons field'ını Map<String, String> olarak çevir
-    final iconsData = data['icons'] as Map<String, dynamic>? ?? {};
+    // icons field'ını Map<String, String> olarak çevir (Icons veya icons)
+    final iconsData =
+        (data['Icons'] ?? data['icons']) as Map<String, dynamic>? ?? {};
+    print('🎨 Icons field data type: ${iconsData.runtimeType}');
+    print('🎨 Icons count: ${iconsData.length}');
     final Map<String, String> icons = {};
 
     iconsData.forEach((key, value) {
@@ -101,15 +108,29 @@ class ThemeModel {
     }
 
     // Cloudinary URL'lerini optimize et
-    final rawPreviewImage = data['previewImage'] as String? ?? '';
-    final rawWallpaperUrl = data['wallpaperUrl'] as String? ?? '';
+    // Firebase'de "PrevievImage" (typo) veya "previewImage" olabilir
+    final rawPreviewImage =
+        (data['PrevievImage'] ??
+                data['PreviewImage'] ??
+                data['previewImage'] ??
+                '')
+            as String;
+    // Firebase'de "WallpaperURL" veya "wallpaperUrl" olabilir
+    final rawWallpaperUrl =
+        (data['WallpaperURL'] ?? data['wallpaperUrl'] ?? '') as String;
+
+    // iconPackId için alternatif field isimleri kontrol et (IconPackID öncelikli)
+    final iconPackId =
+        (data['IconPackID'] ?? data['IconPackId'] ?? data['iconPackId'] ?? '')
+            as String;
+    print('🎯 Theme ${doc.id} IconPackID: "$iconPackId"');
 
     return ThemeModel(
       id: doc.id,
       themeName: data['themeName'] as String? ?? 'Untitled Theme',
       previewImage: CloudinaryHelper.optimizeWithWidth(rawPreviewImage, 800),
       wallpaperUrl: CloudinaryHelper.getFullHD(rawWallpaperUrl),
-      iconPackId: data['iconPackId'] as String? ?? '',
+      iconPackId: iconPackId,
       category: data['category'] as String? ?? 'Tümü',
     );
   }

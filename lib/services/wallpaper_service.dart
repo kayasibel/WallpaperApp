@@ -17,7 +17,7 @@ class WallpaperService {
   /// Varsayılan sıralama ile döner (createdAt olmadan)
   Stream<List<WallpaperModel>> getWallpapersStream() {
     return _firestore
-        .collection('wallpapers')
+        .collection('Wallpapers')
         .snapshots()
         .map((snapshot) {
           print('Firestore\'dan ${snapshot.docs.length} wallpaper geldi');
@@ -44,7 +44,7 @@ class WallpaperService {
 
     // Belirli kategori için filtreleme (orderBy kaldırıldı)
     return _firestore
-        .collection('wallpapers')
+        .collection('Wallpapers')
         .where('category', isEqualTo: category)
         .snapshots()
         .map((snapshot) {
@@ -66,7 +66,7 @@ class WallpaperService {
   Future<WallpaperModel?> getWallpaperById(String id) async {
     try {
       print('Wallpaper ID: $id getiriliyor...');
-      final doc = await _firestore.collection('wallpapers').doc(id).get();
+      final doc = await _firestore.collection('Wallpapers').doc(id).get();
       if (doc.exists) {
         print('✅ Wallpaper ID: $id bulundu');
         return WallpaperModel.fromFirestore(doc);

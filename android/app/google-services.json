@@ -1,79 +1,26 @@
 {
   "project_info": {
-    "project_number": "932174522384",
-    "project_id": "wallpaper-app-3c8c6",
-    "storage_bucket": "wallpaper-app-3c8c6.firebasestorage.app"
+    "project_number": "47010221246",
+    "project_id": "anime-wallpaper-1fd27",
+    "storage_bucket": "anime-wallpaper-1fd27.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:932174522384:android:9884fb5d04209ce8eac295",
+        "mobilesdk_app_id": "1:47010221246:android:bc1e8b6320c2de54f9a2ef",
         "android_client_info": {
-          "package_name": "com.example.wallpaper_theme_app"
+          "package_name": "com.anime.theme.wallpaper"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "932174522384-eadfq919ljk7rfg6hn8dhls9il7rcuf4.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyC2MNKilBBRrGe5iLTRwZ2XItDmm5xO5bw"
+          "current_key": "AIzaSyBTF9YC4p2wbnzWlaMJ6Qg73IEdyxNmAJk"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "932174522384-0o0cc6uihnnsbrqh5g78hvj1iids6eof.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "932174522384-bcfi1e5epb1tmp7oijqsdfbpf8meip6k.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.example.wallpaperThemeApp"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:932174522384:android:f0e4992165cd7c00eac295",
-        "android_client_info": {
-          "package_name": "com.sibelkaya.vibeset.themes"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "932174522384-eadfq919ljk7rfg6hn8dhls9il7rcuf4.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyC2MNKilBBRrGe5iLTRwZ2XItDmm5xO5bw"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "932174522384-0o0cc6uihnnsbrqh5g78hvj1iids6eof.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "932174522384-bcfi1e5epb1tmp7oijqsdfbpf8meip6k.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.example.wallpaperThemeApp"
-              }
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }

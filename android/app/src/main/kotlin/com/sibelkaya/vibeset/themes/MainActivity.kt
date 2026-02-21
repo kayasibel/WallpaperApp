@@ -1,4 +1,4 @@
-package com.sibelkaya.vibeset.themes
+package com.anime.theme.wallpaper
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -18,6 +18,7 @@ import android.graphics.drawable.Icon
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import android.provider.Settings
 import android.widget.RemoteViews
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
@@ -26,7 +27,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
-import com.sibelkaya.vibeset.themes.BuildConfig
+import com.anime.theme.wallpaper.BuildConfig
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.app/shortcuts"
@@ -58,6 +59,139 @@ class MainActivity : FlutterActivity() {
     private fun logWarning(tag: String, message: String) {
         if (BuildConfig.DEBUG) {
             android.util.Log.w(tag, message)
+        }
+    }
+    
+    // Launcher'ın gösterdiği kısa uygulama ismini al
+    private fun getLauncherLabel(packageName: String): String? {
+        return try {
+            val pm = packageManager
+            val launchIntent = pm.getLaunchIntentForPackage(packageName)
+            
+            if (launchIntent != null) {
+                // Launcher activity'nin label'ını al (bu genellikle kısa isimdir)
+                val activityInfo = pm.resolveActivity(launchIntent, 0)?.activityInfo
+                if (activityInfo != null) {
+                    val label = activityInfo.loadLabel(pm).toString()
+                    logDebug("MainActivity", "📝 Launcher label for $packageName: $label")
+                    return label
+                }
+            }
+            
+            // Fallback: Application label
+            val appInfo = pm.getApplicationInfo(packageName, 0)
+            val label = pm.getApplicationLabel(appInfo).toString()
+            logDebug("MainActivity", "📝 Application label for $packageName: $label")
+            label
+        } catch (e: Exception) {
+            logError("MainActivity", "❌ Failed to get label for $packageName", e)
+            null
+        }
+    }
+    
+    // MIUI / Xiaomi / POCO / Redmi cihaz kontrolü
+    private fun isMiuiDevice(): Boolean {
+        return try {
+            val clazz = Class.forName("android.os.SystemProperties")
+            val method = clazz.getMethod("get", String::class.java)
+            val miuiVersion = method.invoke(null, "ro.miui.ui.version.name") as? String
+            val isMiui = !miuiVersion.isNullOrEmpty()
+            logDebug("MainActivity", "📱 MIUI check: version=$miuiVersion, isMIUI=$isMiui")
+            isMiui
+        } catch (e: Exception) {
+            logDebug("MainActivity", "📱 Not MIUI device (check failed)")
+            false
+        }
+    }
+    
+    // MIUI için widget veya shortcut oluşturma
+    private fun createMiuiShortcut(iconPath: String?, packageName: String, appName: String, result: MethodChannel.Result) {
+        try {
+            logDebug("MainActivity", "🎯 Creating MIUI shortcut for: $appName ($packageName)")
+            
+            // MIUI'de widget API desteklenmiyor gibi davranır ama dialog göstermez
+            // Bu yüzden direkt shortcut yöntemini kullan
+            logDebug("MainActivity", "📱 MIUI: Using shortcut method (widget unreliable on MIUI)")
+            
+            // Hedef uygulamanın launch intent'ini al
+            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+            if (launchIntent == null) {
+                result.error("PACKAGE_NOT_FOUND", "Hedef uygulama bulunamadı", null)
+                return
+            }
+            
+            // İkon yükle
+            var iconBitmap: Bitmap? = null
+            if (iconPath != null && iconPath.isNotEmpty()) {
+                try {
+                    val iconFile = File(iconPath)
+                    if (iconFile.exists()) {
+                        iconBitmap = BitmapFactory.decodeFile(iconFile.absolutePath)
+                        logDebug("MainActivity", "✅ İkon yüklendi (MIUI): $iconPath")
+                    }
+                } catch (e: Exception) {
+                    logError("MainActivity", "❌ İkon yükleme hatası: ${e.message}")
+                }
+            }
+            
+            if (iconBitmap == null) {
+                result.error("ICON_LOAD_FAILED", "İkon dosyası yüklenemedi", null)
+                return
+            }
+            
+            // ShortcutManagerCompat dene (Android 8+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
+                    val shortcutId = "miui_${packageName}_${System.currentTimeMillis()}"
+                    
+                    val shortcutInfo = ShortcutInfoCompat.Builder(this, shortcutId)
+                        .setShortLabel(appName)
+                        .setLongLabel(appName)
+                        .setIcon(IconCompat.createWithBitmap(iconBitmap))
+                        .setIntent(launchIntent)
+                        .build()
+                    
+                    val success = ShortcutManagerCompat.requestPinShortcut(this, shortcutInfo, null)
+                    
+                    if (success) {
+                        logDebug("MainActivity", "✅ MIUI shortcut created via ShortcutManagerCompat")
+                        result.success(true)
+                        return
+                    } else {
+                        logWarning("MainActivity", "⚠️ ShortcutManagerCompat failed, trying legacy method")
+                    }
+                }
+            }
+            
+            // Legacy broadcast yöntemi (MIUI için fallback)
+            val shortcutIntent = Intent("com.android.launcher.action.INSTALL_SHORTCUT")
+            shortcutIntent.putExtra(Intent.EXTRA_SHORTCUT_INTENT, launchIntent)
+            shortcutIntent.putExtra(Intent.EXTRA_SHORTCUT_NAME, appName)
+            shortcutIntent.putExtra("duplicate", false)
+            shortcutIntent.putExtra(Intent.EXTRA_SHORTCUT_ICON, iconBitmap)
+            
+            // Xiaomi özel action'ları da dene
+            sendBroadcast(shortcutIntent)
+            
+            // MIUI için alternatif intent
+            try {
+                val miuiIntent = Intent("com.miui.home.launcher.action.INSTALL_SHORTCUT")
+                miuiIntent.putExtra(Intent.EXTRA_SHORTCUT_INTENT, launchIntent)
+                miuiIntent.putExtra(Intent.EXTRA_SHORTCUT_NAME, appName)
+                miuiIntent.putExtra("duplicate", false)
+                miuiIntent.putExtra(Intent.EXTRA_SHORTCUT_ICON, iconBitmap)
+                sendBroadcast(miuiIntent)
+                logDebug("MainActivity", "📤 MIUI broadcast sent")
+            } catch (e: Exception) {
+                logWarning("MainActivity", "MIUI specific broadcast failed: ${e.message}")
+            }
+            
+            logDebug("MainActivity", "✅ Legacy shortcut broadcast sent")
+            result.success(true)
+            
+        } catch (e: Exception) {
+            logError("MainActivity", "❌ MIUI shortcut error: ${e.message}", e)
+            result.error("MIUI_SHORTCUT_ERROR", "MIUI kısayolu oluşturulamadı: ${e.message}", null)
         }
     }
     
@@ -182,30 +316,45 @@ class MainActivity : FlutterActivity() {
         shortcutsChannel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "createAppWidget" -> {
-                    val appName = call.argument<String>("appName")
+                    val flutterAppName = call.argument<String>("appName")
                     val iconPath = call.argument<String>("iconPath")
                     val packageName = call.argument<String>("packageName")
 
-                    if (packageName == null || appName == null) {
+                    if (packageName == null || flutterAppName == null) {
                         result.error("INVALID_ARGUMENTS", "packageName ve appName gereklidir", null)
                         return@setMethodCallHandler
                     }
 
+                    // Launcher'ın gösterdiği kısa ismi al, bulamazsa Flutter'dan geleni kullan
+                    val appName = getLauncherLabel(packageName) ?: flutterAppName
+                    logDebug("MainActivity", "📝 Using app name: $appName (Flutter sent: $flutterAppName)")
+
                     try {
-                        createAppWidget(iconPath, packageName, appName, result)
+                        // MIUI cihazlarda önce widget dene, başarısız olursa shortcut kullan
+                        if (isMiuiDevice()) {
+                            logDebug("MainActivity", "📱 MIUI detected - trying widget first, fallback to shortcut")
+                            createAppWidgetWithFallback(iconPath, packageName, appName, result)
+                        } else {
+                            // Diğer cihazlarda widget kullan (badge göstermez)
+                            createAppWidget(iconPath, packageName, appName, result)
+                        }
                     } catch (e: Exception) {
                         result.error("WIDGET_ERROR", "Widget oluşturulamadı: ${e.message}", null)
                     }
                 }
                 "createAppShortcut" -> {
-                    val appName = call.argument<String>("appName")
+                    val flutterAppName = call.argument<String>("appName")
                     val iconPath = call.argument<String>("iconPath")
                     val packageName = call.argument<String>("packageName")
 
-                    if (appName == null || packageName == null) {
-                    result.error("INVALID_ARGUMENTS", "appName ve packageName gereklidir", null)
-                    return@setMethodCallHandler
-                }
+                    if (flutterAppName == null || packageName == null) {
+                        result.error("INVALID_ARGUMENTS", "appName ve packageName gereklidir", null)
+                        return@setMethodCallHandler
+                    }
+
+                    // Launcher'ın gösterdiği kısa ismi al, bulamazsa Flutter'dan geleni kullan
+                    val appName = getLauncherLabel(packageName) ?: flutterAppName
+                    logDebug("MainActivity", "📝 Shortcut using app name: $appName (Flutter sent: $flutterAppName)")
 
                 try {
                     // Hedef uygulamanın launch intent'ini al
@@ -319,6 +468,171 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    // MIUI için: Önce widget dene, başarısız olursa shortcut'a geç
+    private fun createAppWidgetWithFallback(iconPath: String?, packageName: String, appName: String, result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            // Android 8.0 altında direkt shortcut kullan
+            logDebug("MainActivity", "📱 Android < 8.0 - using shortcut directly")
+            createMiuiShortcut(iconPath, packageName, appName, result)
+            return
+        }
+
+        val appWidgetManager = AppWidgetManager.getInstance(this)
+        val myProvider = ComponentName(this, IconWidgetProvider::class.java)
+
+        // Widget pinleme desteklenmiyor mu kontrol et
+        val isSupported = appWidgetManager.isRequestPinAppWidgetSupported
+        logDebug("MainActivity", "🔍 MIUI - isRequestPinAppWidgetSupported: $isSupported")
+        
+        if (!isSupported) {
+            // Widget desteklenmiyor, shortcut kullan
+            logDebug("MainActivity", "📱 Widget not supported - falling back to shortcut")
+            createMiuiShortcut(iconPath, packageName, appName, result)
+            return
+        }
+
+        // Icon dosyasının var olduğunu doğrula
+        if (iconPath == null || !File(iconPath).exists()) {
+            logError("MainActivity", "❌ Icon file doesn't exist!")
+            result.error("INVALID_ICON", "Icon dosyası bulunamadı", null)
+            return
+        }
+
+        // Mevcut widget sayısını kaydet (sonra karşılaştırmak için)
+        val existingWidgetCount = appWidgetManager.getAppWidgetIds(myProvider).size
+        logDebug("MainActivity", "📊 Existing widget count before request: $existingWidgetCount")
+
+        // Widget için geçici bir ID oluştur
+        val tempWidgetId = (System.currentTimeMillis() % 100000000).toInt()
+        logDebug("MainActivity", "🆔 Temp Widget ID: $tempWidgetId")
+
+        // Widget bilgilerini SharedPreferences'a kaydet
+        val prefs = getSharedPreferences("widget_prefs", Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putString("WIDGET_ICON_PATH_$tempWidgetId", iconPath)
+            putString("WIDGET_PACKAGE_NAME_$tempWidgetId", packageName)
+            putString("WIDGET_APP_NAME_$tempWidgetId", appName)
+            putInt("LATEST_TEMP_WIDGET_ID", tempWidgetId)
+            putLong("LATEST_TEMP_WIDGET_TIMESTAMP", System.currentTimeMillis())
+            commit()
+        }
+
+        // Widget Bundle'ı oluştur
+        val configBundle = android.os.Bundle()
+        configBundle.putInt("temp_widget_id", tempWidgetId)
+        
+        // Callback intent
+        val callbackIntent = Intent(this, IconWidgetProvider::class.java).apply {
+            action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+            putExtra("temp_widget_id", tempWidgetId)
+        }
+        
+        // PendingIntent flags
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        }
+        
+        val successCallback = PendingIntent.getBroadcast(this, tempWidgetId, callbackIntent, flags)
+
+        logDebug("MainActivity", "🚀 MIUI - Trying widget first...")
+        
+        // Widget'ı pin etmeyi dene
+        val dialogShown = appWidgetManager.requestPinAppWidget(myProvider, configBundle, successCallback)
+        
+        logDebug("MainActivity", "📋 requestPinAppWidget returned: $dialogShown")
+        
+        if (!dialogShown) {
+            // Dialog gösterilmedi - direkt shortcut'a geç
+            logWarning("MainActivity", "⚠️ Widget dialog not shown - falling back to shortcut")
+            createMiuiShortcut(iconPath, packageName, appName, result)
+            return
+        }
+        
+        logDebug("MainActivity", "✅ Widget dialog shown - waiting to verify...")
+        
+        // 3 saniye sonra widget gerçekten eklendi mi kontrol et
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            val newWidgetCount = appWidgetManager.getAppWidgetIds(myProvider).size
+            logDebug("MainActivity", "🔍 MIUI verification - Widget count: before=$existingWidgetCount, after=$newWidgetCount")
+            
+            if (newWidgetCount > existingWidgetCount) {
+                // Widget başarıyla eklendi!
+                logDebug("MainActivity", "✅ Widget successfully added on MIUI!")
+                val appWidgetIds = appWidgetManager.getAppWidgetIds(myProvider)
+                val latestWidgetId = appWidgetIds.maxOrNull()
+                
+                if (latestWidgetId != null) {
+                    // Widget verilerini güncelle
+                    prefs.edit().apply {
+                        putString("WIDGET_ICON_PATH_$latestWidgetId", iconPath)
+                        putString("WIDGET_PACKAGE_NAME_$latestWidgetId", packageName)
+                        putString("WIDGET_APP_NAME_$latestWidgetId", appName)
+                        commit()
+                    }
+                    
+                    // Widget'ı güncelle
+                    IconWidgetProvider.updateAppWidget(this, appWidgetManager, latestWidgetId, null)
+                    logDebug("MainActivity", "🎨 Widget updated with ID: $latestWidgetId")
+                }
+            } else {
+                // Widget eklenmedi - MIUI muhtemelen engelledi
+                // Shortcut ile tekrar dene
+                logWarning("MainActivity", "⚠️ Widget not added after 3s - MIUI may have blocked it")
+                logDebug("MainActivity", "📱 Falling back to shortcut...")
+                
+                // Shortcut oluştur (result zaten döndürüldüğü için yeni result kullanamayız)
+                // Ama en azından shortcut ekleyebiliriz
+                try {
+                    createMiuiShortcutSilent(iconPath, packageName, appName)
+                } catch (e: Exception) {
+                    logError("MainActivity", "❌ Fallback shortcut failed: ${e.message}")
+                }
+            }
+        }, 3000) // 3 saniye bekle
+        
+        // Kullanıcıya hemen yanıt ver (widget dialog gösterildi)
+        result.success(true)
+    }
+    
+    // Sessiz shortcut oluşturma (result olmadan - fallback için)
+    private fun createMiuiShortcutSilent(iconPath: String?, packageName: String, appName: String) {
+        logDebug("MainActivity", "🎯 Creating silent MIUI shortcut for: $appName")
+        
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName) ?: return
+        
+        var iconBitmap: Bitmap? = null
+        if (iconPath != null && iconPath.isNotEmpty()) {
+            try {
+                val iconFile = File(iconPath)
+                if (iconFile.exists()) {
+                    iconBitmap = BitmapFactory.decodeFile(iconFile.absolutePath)
+                }
+            } catch (e: Exception) {
+                logError("MainActivity", "❌ Icon load error: ${e.message}")
+            }
+        }
+        
+        if (iconBitmap == null) return
+        
+        // ShortcutManagerCompat dene
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && 
+            ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
+            
+            val shortcutId = "miui_fallback_${packageName}_${System.currentTimeMillis()}"
+            val shortcutInfo = ShortcutInfoCompat.Builder(this, shortcutId)
+                .setShortLabel(appName)
+                .setLongLabel(appName)
+                .setIcon(IconCompat.createWithBitmap(iconBitmap))
+                .setIntent(launchIntent)
+                .build()
+            
+            ShortcutManagerCompat.requestPinShortcut(this, shortcutInfo, null)
+            logDebug("MainActivity", "✅ Silent fallback shortcut requested")
+        }
+    }
+
     private fun createAppWidget(iconPath: String?, packageName: String, appName: String, result: MethodChannel.Result) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             result.error("NOT_SUPPORTED", "Widget pinleme Android 8.0+ gerektirir", null)
@@ -329,7 +643,11 @@ class MainActivity : FlutterActivity() {
         val myProvider = ComponentName(this, IconWidgetProvider::class.java)
 
         // Widget pinleme desteklenmiyor mu kontrol et
-        if (!appWidgetManager.isRequestPinAppWidgetSupported) {
+        val isSupported = appWidgetManager.isRequestPinAppWidgetSupported
+        logDebug("MainActivity", "🔍 isRequestPinAppWidgetSupported: $isSupported")
+        logDebug("MainActivity", "📱 Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+        
+        if (!isSupported) {
             result.error("NOT_SUPPORTED", "Bu cihaz widget pinlemeyi desteklemiyor", null)
             return
         }
@@ -344,81 +662,61 @@ class MainActivity : FlutterActivity() {
             return
         }
 
-        // Widget için geçici bir ID oluştur (sistemin gerçek ID'si farklı olacak)
+        // Widget için geçici bir ID oluştur
         val tempWidgetId = (System.currentTimeMillis() % 100000000).toInt()
-
         logDebug("MainActivity", "🆔 Temp Widget ID: $tempWidgetId")
 
-        // Widget bilgilerini KEY_PREFIX ile SharedPreferences'a kaydet
+        // Widget bilgilerini SharedPreferences'a kaydet
         val prefs = getSharedPreferences("widget_prefs", Context.MODE_PRIVATE)
-        val editor = prefs.edit()
-        editor.putString("WIDGET_ICON_PATH_$tempWidgetId", iconPath)
-        editor.putString("WIDGET_PACKAGE_NAME_$tempWidgetId", packageName)
-        editor.putString("WIDGET_APP_NAME_$tempWidgetId", appName)
-        val saved = editor.commit() // Senkron kaydet
+        prefs.edit().apply {
+            putString("WIDGET_ICON_PATH_$tempWidgetId", iconPath)
+            putString("WIDGET_PACKAGE_NAME_$tempWidgetId", packageName)
+            putString("WIDGET_APP_NAME_$tempWidgetId", appName)
+            putInt("LATEST_TEMP_WIDGET_ID", tempWidgetId)
+            putLong("LATEST_TEMP_WIDGET_TIMESTAMP", System.currentTimeMillis())
+            commit()
+        }
         
-        logDebug("MainActivity", if (saved) "✅ Saved to SharedPreferences" else "❌ Failed to save")
-        
-        // Doğrulama
-        val verify = prefs.getString("WIDGET_ICON_PATH_$tempWidgetId", null)
-        logDebug("MainActivity", "🔍 Verification - Saved icon path: $verify")
+        logDebug("MainActivity", "💾 Saved widget data to SharedPreferences")
 
-        // Widget Bundle'ı oluştur - tempWidgetId'yi geçir
+        // Widget Bundle'ı oluştur
         val configBundle = android.os.Bundle()
         configBundle.putInt("temp_widget_id", tempWidgetId)
         
-        // ÖNEMLİ: En son temp widget ID'yi ayrı bir key ile de kaydet
-        // Çünkü callback çalışmayabilir, onUpdate içinde kullanacağız
-        editor.putInt("LATEST_TEMP_WIDGET_ID", tempWidgetId)
-        editor.putLong("LATEST_TEMP_WIDGET_TIMESTAMP", System.currentTimeMillis())
-        editor.commit()
-        
-        logDebug("MainActivity", "💾 Saved LATEST_TEMP_WIDGET_ID: $tempWidgetId")
-        
-        // Callback intent - widget eklenince ID mapping yapacağız
+        // Callback intent
         val callbackIntent = Intent(this, IconWidgetProvider::class.java).apply {
             action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
             putExtra("temp_widget_id", tempWidgetId)
         }
         
-        // PendingIntent flags - Android sürümüne göre
+        // PendingIntent flags
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Android 12+ (API 31+) - FLAG_MUTABLE gerekli
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
         } else {
-            // Android 11 ve altı (API 30-) - FLAG_MUTABLE yok
-            PendingIntent.FLAG_UPDATE_CURRENT
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         }
         
-        val successCallback = PendingIntent.getBroadcast(
-            this,
-            tempWidgetId,
-            callbackIntent,
-            flags
-        )
+        val successCallback = PendingIntent.getBroadcast(this, tempWidgetId, callbackIntent, flags)
 
         logDebug("MainActivity", "🚀 Requesting pin widget...")
-        logDebug("MainActivity", "📱 Android SDK: ${Build.VERSION.SDK_INT}")
-        logDebug("MainActivity", "🏴 PendingIntent flags: $flags")
         
         // Widget'ı pin et
-        // NOT: requestPinAppWidget sadece dialog açılıp açılmadığını döndürür
-        // Kullanıcının "Add" veya "Cancel" seçimini callback'ten öğreniriz
         val dialogShown = appWidgetManager.requestPinAppWidget(myProvider, configBundle, successCallback)
         
+        logDebug("MainActivity", "📋 requestPinAppWidget returned: $dialogShown")
+        
         if (dialogShown) {
-            logDebug("MainActivity", "📋 Widget pinning dialog shown to user")
+            logDebug("MainActivity", "✅ Widget pinning dialog shown to user")
             
-            // Android 11 için polling başlat - kullanıcı widget'ı ekledi mi kontrol et
+            // Basit polling - widget eklendi mi kontrol et
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 checkAndSetupNewWidget(tempWidgetId, iconPath, packageName, appName)
-            }, 2000) // 2 saniye sonra kontrol et
+            }, 2000)
             
-            // Kullanıcı henüz seçim yapmadı, başarı mesajını gösterme
-            result.success(false)
+            result.success(true)
         } else {
-            logWarning("MainActivity", "⚠️ Widget pinning NOT supported")
-            result.error("PIN_FAILED", "Widget pinleme desteklenmiyor", null)
+            logWarning("MainActivity", "❌ Widget pinning dialog NOT shown")
+            result.error("PIN_FAILED", "Widget dialog gösterilemedi", null)
         }
     }
     

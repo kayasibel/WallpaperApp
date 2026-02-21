@@ -1,4 +1,4 @@
-package com.sibelkaya.vibeset.themes
+package com.anime.theme.wallpaper
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -14,7 +14,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
-import com.sibelkaya.vibeset.themes.BuildConfig
+import com.anime.theme.wallpaper.BuildConfig
 
 class IconWidgetProvider : AppWidgetProvider() {
 

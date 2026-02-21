@@ -1,4 +1,4 @@
-# VibeSet: Aesthetic Themes & Wallpapers
+# AniTheme: Anime Wallpapers & Icons
 
 A modern Flutter application for discovering and applying stunning wallpapers and aesthetic icon themes.
 

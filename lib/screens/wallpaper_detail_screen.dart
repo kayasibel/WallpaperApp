@@ -10,6 +10,7 @@ import '../models/wallpaper_model.dart';
 import '../services/favorite_service.dart';
 import '../services/download_service.dart';
 import '../services/language_service.dart';
+import '../services/ad_manager.dart';
 import '../utils/custom_snackbar.dart';
 
 class WallpaperDetailScreen extends StatefulWidget {
@@ -29,14 +30,18 @@ class WallpaperDetailScreen extends StatefulWidget {
 class _WallpaperDetailScreenState extends State<WallpaperDetailScreen> {
   final FavoriteService _favoriteService = FavoriteService();
   final DownloadService _downloadService = DownloadService();
+  final AdManager _adManager = AdManager();
   bool _showUI = true;
   bool _isFavorite = false;
-  bool _isLoading = true;
+  bool _isAdLoading = false;
 
   @override
   void initState() {
     super.initState();
     _loadFavoriteStatus();
+
+    // Reklamı sayfa açılır açılmaz arka planda yükle
+    _adManager.ensureRewardedAdLoaded();
   }
 
   // Favori durumunu yükle
@@ -44,7 +49,6 @@ class _WallpaperDetailScreenState extends State<WallpaperDetailScreen> {
     final isFav = await _favoriteService.isFavorite(widget.wallpaper.id);
     setState(() {
       _isFavorite = isFav;
-      _isLoading = false;
     });
   }
 
@@ -60,18 +64,15 @@ class _WallpaperDetailScreenState extends State<WallpaperDetailScreen> {
 
   // Duvar kağıdını indir
   Future<void> _downloadWallpaper() async {
-    final langProvider = Provider.of<LanguageProvider>(
-      context,
-      listen: false,
-    );
-    
+    final langProvider = Provider.of<LanguageProvider>(context, listen: false);
+
     // Loading göster
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => const Center(child: CircularProgressIndicator()),
     );
-    
+
     final success = await _downloadService.downloadAndSaveWallpaper(
       widget.wallpaper.imageUrl,
     );
@@ -93,6 +94,62 @@ class _WallpaperDetailScreenState extends State<WallpaperDetailScreen> {
         );
       }
     }
+  }
+
+  /// Reklam gösterip ardından duvar kağıdını uygular
+  Future<void> _showRewardedAdThenApplyWallpaper() async {
+    final langProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    // Reklam hazır mı kontrol et
+    if (!_adManager.isRewardedReady) {
+      setState(() => _isAdLoading = true);
+
+      // Kullanıcıya loading göster
+      showCustomSnackBar(
+        langProvider.getText('ad_loading'),
+        type: SnackBarType.info,
+      );
+
+      // Timeout ile reklam yüklemesini bekle (max 4 saniye)
+      final adReady = await _adManager.waitForRewardedAd();
+
+      if (!mounted) return;
+      setState(() => _isAdLoading = false);
+
+      if (!adReady) {
+        showCustomSnackBar(
+          langProvider.getText('ad_not_ready'),
+          type: SnackBarType.error,
+        );
+        return;
+      }
+    }
+
+    // Reklam göster ve callback'te duvar kağıdını uygula
+    _adManager.showRewardedAd(
+      onUserEarnedReward: () {
+        // Kullanıcı ödülü kazandı, duvar kağıdını uygula
+        _applyWallpaper();
+      },
+      onAdDismissed: () {
+        // Reklam kapatıldı ama ödül verilmedi
+        if (mounted) {
+          showCustomSnackBar(
+            langProvider.getText('ad_reward_not_earned'),
+            type: SnackBarType.info,
+          );
+        }
+      },
+      onAdFailedToShow: (error) {
+        // Reklam gösterilemedi
+        if (mounted) {
+          showCustomSnackBar(
+            langProvider.getText('ad_failed'),
+            type: SnackBarType.error,
+          );
+        }
+      },
+    );
   }
 
   Future<void> _applyWallpaper() async {
@@ -245,7 +302,9 @@ class _WallpaperDetailScreenState extends State<WallpaperDetailScreen> {
                             child: Material(
                               color: Colors.transparent,
                               child: InkWell(
-                                onTap: _applyWallpaper,
+                                onTap: _isAdLoading
+                                    ? null
+                                    : _showRewardedAdThenApplyWallpaper,
                                 borderRadius: BorderRadius.circular(24),
                                 splashColor: Colors.white.withOpacity(0.3),
                                 child: Container(
@@ -255,15 +314,24 @@ class _WallpaperDetailScreenState extends State<WallpaperDetailScreen> {
                                     borderRadius: BorderRadius.circular(24),
                                   ),
                                   child: Center(
-                                    child: Text(
-                                      langProvider.getText('apply'),
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 1.2,
-                                      ),
-                                    ),
+                                    child: _isAdLoading
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        : Text(
+                                            langProvider.getText('apply'),
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 1.2,
+                                            ),
+                                          ),
                                   ),
                                 ),
                               ),

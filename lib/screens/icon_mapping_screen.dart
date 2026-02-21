@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../models/theme_model.dart';
 import '../services/shortcut_service.dart';
 import '../services/language_service.dart';
+import '../services/ad_manager.dart';
 import '../utils/custom_snackbar.dart';
 
 class IconMappingScreen extends StatefulWidget {
@@ -44,12 +45,19 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
   List<AppInfo>? _cachedApps;
   bool _isLoadingApps = false;
 
+  // Reklam yöneticisi
+  final AdManager _adManager = AdManager();
+  bool _isAdLoading = false;
+
   @override
   void initState() {
     super.initState();
     _loadSavedMappings();
     _setupWidgetSuccessListener();
     _loadAppsInBackground(); // Uygulamaları arka planda yükle
+
+    // Reklamı sayfa açılır açılmaz arka planda yükle
+    _adManager.ensureRewardedAdLoaded();
   }
 
   void _setupWidgetSuccessListener() {
@@ -72,7 +80,7 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
   // Uygulamaları arka planda yükle (cache için)
   Future<void> _loadAppsInBackground() async {
     if (_isLoadingApps || _cachedApps != null) return;
-    
+
     setState(() {
       _isLoadingApps = true;
     });
@@ -84,8 +92,10 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
       );
 
       // Launcher aktivitesi olmayan uygulamaları filtrele
-      final filteredApps = apps.where((app) => app.packageName != null).toList();
-      
+      final filteredApps = apps
+          .where((app) => app.packageName != null)
+          .toList();
+
       // Alfabetik sırala
       filteredApps.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
 
@@ -113,14 +123,15 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => const Center(child: CircularProgressIndicator()),
+          builder: (context) =>
+              const Center(child: CircularProgressIndicator()),
         );
-        
+
         // Yüklenene kadar bekle
         while (_cachedApps == null && _isLoadingApps) {
           await Future.delayed(const Duration(milliseconds: 100));
         }
-        
+
         if (mounted) {
           Navigator.pop(context); // Loading dialog'u kapat
         }
@@ -131,7 +142,7 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
     }
 
     final apps = _cachedApps;
-    
+
     if (apps == null || apps.isEmpty) {
       final langProvider = Provider.of<LanguageProvider>(
         context,
@@ -281,25 +292,32 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
           // ADIM 2 & 3: Manuel seçim yok, Akıllı Otomatik Eşleştirme dene
           // İkon ismini paket adı olarak kullan
           final potentialPackageName = iconName;
-          
+
           try {
             // Cihazda bu paket adıyla uygulama yüklü mü kontrol et
-            final appInfo = await InstalledApps.getAppInfo(potentialPackageName);
+            final appInfo = await InstalledApps.getAppInfo(
+              potentialPackageName,
+            );
 
             if (appInfo != null) {
               // ADIM 3: Yüklü! Otomatik olarak eşleştir
               setState(() {
                 _iconPackageMap[iconName] = potentialPackageName;
-                _iconAppNameMap[iconName] = appInfo.name ?? potentialPackageName;
+                _iconAppNameMap[iconName] =
+                    appInfo.name ?? potentialPackageName;
 
                 // İkonu yükle
                 if (appInfo.icon != null) {
                   _iconAppIconMap[iconName] = appInfo.icon!;
                 }
               });
-              print('Otomatik eşleştirme başarılı: $iconName -> $potentialPackageName');
+              print(
+                'Otomatik eşleştirme başarılı: $iconName -> $potentialPackageName',
+              );
             } else {
-              print('Otomatik eşleştirme yapılamadı: $iconName (uygulama yüklü değil)');
+              print(
+                'Otomatik eşleştirme yapılamadı: $iconName (uygulama yüklü değil)',
+              );
             }
           } catch (e) {
             // Uygulama yüklü değil veya erişim hatası
@@ -310,6 +328,238 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
     } catch (e) {
       print('Eşleştirmeler yüklenemedi: $e');
     }
+  }
+
+  /// Reklam gösterip ardından ikonu uygular
+  Future<void> _showRewardedAdThenApplyIcon(
+    String iconName,
+    String iconUrl,
+  ) async {
+    final langProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    // Uygulama seçilmiş mi kontrol et
+    final packageName = _iconPackageMap[iconName];
+    if (packageName == null || packageName.isEmpty) {
+      showCustomSnackBar(
+        langProvider.getText('select_app_first'),
+        type: SnackBarType.info,
+      );
+      return;
+    }
+
+    // Reklam hazır mı kontrol et
+    if (!_adManager.isRewardedReady) {
+      setState(() => _isAdLoading = true);
+
+      // Kullanıcıya loading göster
+      showCustomSnackBar(
+        langProvider.getText('ad_loading'),
+        type: SnackBarType.info,
+      );
+
+      // Timeout ile reklam yüklemesini bekle (max 4 saniye)
+      final adReady = await _adManager.waitForRewardedAd();
+
+      if (!mounted) return;
+      setState(() => _isAdLoading = false);
+
+      if (!adReady) {
+        showCustomSnackBar(
+          langProvider.getText('ad_not_ready'),
+          type: SnackBarType.error,
+        );
+        return;
+      }
+    }
+
+    // Değerleri yerel değişkenlere kaydet (callback güvenliği için)
+    final savedIconName = iconName;
+    final savedIconUrl = iconUrl;
+    final savedPackageName = packageName;
+    final savedAppName = _iconAppNameMap[iconName];
+
+    // Reklam göster ve callback'te ikonu uygula
+    _adManager.showRewardedAd(
+      onUserEarnedReward: () {
+        // Kullanıcı ödülü kazandı - BottomSheet göster
+        if (mounted) {
+          _showAddToHomeScreenBottomSheet(
+            savedIconName,
+            savedIconUrl,
+            savedPackageName,
+            savedAppName,
+          );
+        }
+      },
+      onAdDismissed: () {
+        // Reklam kapatıldı ama ödül verilmedi - bir şey yapma
+        if (mounted) {
+          showCustomSnackBar(
+            langProvider.getText('ad_reward_not_earned'),
+            type: SnackBarType.info,
+          );
+        }
+      },
+      onAdFailedToShow: (error) {
+        // Reklam gösterilemedi
+        if (mounted) {
+          showCustomSnackBar(
+            langProvider.getText('ad_failed'),
+            type: SnackBarType.error,
+          );
+        }
+      },
+    );
+  }
+
+  /// Reklam kapandıktan sonra BottomSheet göster - kullanıcı onaylarsa widget ekle
+  void _showAddToHomeScreenBottomSheet(
+    String iconName,
+    String iconUrl,
+    String packageName,
+    String? appName,
+  ) {
+    final langProvider = Provider.of<LanguageProvider>(context, listen: false);
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.grey[600],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // İkon önizleme
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.network(
+                iconUrl,
+                width: 80,
+                height: 80,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  width: 80,
+                  height: 80,
+                  color: Colors.grey[800],
+                  child: const Icon(Icons.image, size: 40),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              langProvider.getText('icon_ready'),
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              appName ?? packageName,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.grey[400],
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context);
+                  // Widget ekleme metodunu ŞİMDİ çağır
+                  _applyIconSafe(iconName, iconUrl, packageName, appName);
+                },
+                icon: const Icon(Icons.add_to_home_screen),
+                label: Text(langProvider.getText('add_to_home_screen')),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                langProvider.getText('cancel'),
+                style: TextStyle(color: Colors.grey[500]),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// İkonu güvenli bir şekilde uygula (callback'ten çağrılır)
+  Future<void> _applyIconSafe(
+    String iconName,
+    String iconUrl,
+    String packageName,
+    String? appName,
+  ) async {
+    // İkon indirme işlemi
+    File? iconFile;
+    try {
+      // İkon görselini indir
+      final response = await http.get(Uri.parse(iconUrl));
+
+      if (response.statusCode != 200) {
+        if (mounted) {
+          final langProvider = Provider.of<LanguageProvider>(
+            context,
+            listen: false,
+          );
+          showCustomSnackBar(
+            langProvider.getText('icon_download_failed'),
+            type: SnackBarType.error,
+          );
+        }
+        return;
+      }
+
+      // KALICI dizine kaydet (getApplicationDocumentsDirectory kullan)
+      final appDir = await getApplicationDocumentsDirectory();
+      final iconsDir = Directory('${appDir.path}/widget_icons');
+      if (!await iconsDir.exists()) {
+        await iconsDir.create(recursive: true);
+      }
+
+      iconFile = File(
+        '${iconsDir.path}/widget_icon_${DateTime.now().millisecondsSinceEpoch}.png',
+      );
+      await iconFile.writeAsBytes(response.bodyBytes);
+
+      print('İkon başarıyla kalıcı dizine kaydedildi: ${iconFile.path}');
+    } catch (e) {
+      print('İkon indirme hatası: $e');
+      return;
+    }
+
+    // ShortcutService kullanarak WIDGET oluştur (ROZET YOK!)
+    final shortcutService = ShortcutService();
+    await shortcutService.createAppWidget(
+      appName: appName ?? packageName,
+      packageName: packageName,
+      iconPath: iconFile.path,
+    );
+
+    // NOT: İkon dosyasını SİLME! Widget'ın buna ihtiyacı var.
+    print('İkon dosyası widget için saklandı: ${iconFile.path}');
   }
 
   Future<void> _applyIcon(String iconName, String iconUrl) async {
@@ -413,7 +663,9 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
                               height: 56,
                               color: Colors.grey[800],
                               child: const Center(
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
                             ),
                             errorWidget: (context, url, error) => Container(
@@ -434,7 +686,8 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
                                 child: SizedBox(
                                   height: 56,
                                   child: OutlinedButton(
-                                    onPressed: () => _selectAppForIcon(iconName),
+                                    onPressed: () =>
+                                        _selectAppForIcon(iconName),
                                     style: OutlinedButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 12,
@@ -456,27 +709,45 @@ class _IconMappingScreenState extends State<IconMappingScreen> {
                                           )
                                         : Text(
                                             langProvider.getText('select_app'),
-                                            style: const TextStyle(fontSize: 13),
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                            ),
                                           ),
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              // Simgeyi Uygula Butonu
+                              // Simgeyi Uygula Butonu (Reklam Wrapper)
                               Expanded(
                                 child: SizedBox(
                                   height: 56,
                                   child: ElevatedButton(
-                                    onPressed: () => _applyIcon(iconName, iconUrl),
+                                    onPressed: _isAdLoading
+                                        ? null
+                                        : () => _showRewardedAdThenApplyIcon(
+                                            iconName,
+                                            iconUrl,
+                                          ),
                                     style: ElevatedButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 12,
                                       ),
                                     ),
-                                    child: Text(
-                                      langProvider.getText('apply'),
-                                      style: const TextStyle(fontSize: 13),
-                                    ),
+                                    child: _isAdLoading
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        : Text(
+                                            langProvider.getText('apply'),
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                            ),
+                                          ),
                                   ),
                                 ),
                               ),

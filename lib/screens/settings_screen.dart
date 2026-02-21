@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/language_service.dart';
 import '../utils/custom_snackbar.dart';
 
@@ -268,62 +269,76 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(20),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.5,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
+                ),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.1),
+                  width: 1,
+                ),
               ),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.1),
-                width: 1,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Handle bar
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  Text(
-                    langProvider.getText('select_lang'),
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  // Dil seçeneklerini dinamik olarak oluştur
-                  ...LanguageProvider.supportedLanguages.map((lang) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: _buildLanguageOption(
-                        context,
-                        '${lang['flag']} ${lang['name']}',
-                        lang['code']!,
-                        langProvider,
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Handle bar
+                    Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                    );
-                  }),
-                  const SizedBox(height: 8),
-                ],
+                    ),
+                    Text(
+                      langProvider.getText('select_lang'),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // Dil seçeneklerini dinamik olarak oluştur - Scrollable
+                    Expanded(
+                      child: ListView(
+                        controller: scrollController,
+                        children: LanguageProvider.supportedLanguages.map((
+                          lang,
+                        ) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _buildLanguageOption(
+                              context,
+                              '${lang['flag']} ${lang['name']}',
+                              lang['code']!,
+                              langProvider,
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
             ),
           ),
@@ -454,32 +469,23 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  // Uygulama değerlendirme
-  void _rateApp(BuildContext context, LanguageProvider langProvider) async {
-    final url = Uri.parse('https://play.google.com/store/apps/details?id=com.sibelkaya.vibeset.themes');
-    
-    try {
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url, mode: LaunchMode.externalApplication);
-      } else {
-        showCustomSnackBar(
-          langProvider.getText('cannot_open_link'),
-          type: SnackBarType.error,
-        );
-      }
-    } catch (e) {
-      showCustomSnackBar(
-        langProvider.getText('error_opening_link'),
-        type: SnackBarType.error,
-      );
-    }
+  // Uygulama değerlendirme - Hibrit Dialog
+  void _rateApp(BuildContext context, LanguageProvider langProvider) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext dialogContext) {
+        return _RatingDialog(langProvider: langProvider);
+      },
+    );
   }
 
   // Uygulamayı paylaş
   void _shareApp(BuildContext context, LanguageProvider langProvider) async {
-    const appUrl = 'https://play.google.com/store/apps/details?id=com.sibelkaya.vibeset.themes';
+    const appUrl =
+        'https://play.google.com/store/apps/details?id=com.anime.theme.wallpaper';
     final shareText = '${langProvider.getText('check_out_app')}\n$appUrl';
-    
+
     try {
       await Share.share(shareText);
     } catch (e) {
@@ -491,9 +497,14 @@ class SettingsScreen extends StatelessWidget {
   }
 
   // Gizlilik politikası
-  void _openPrivacyPolicy(BuildContext context, LanguageProvider langProvider) async {
-    final url = Uri.parse('https://gist.githubusercontent.com/kayasibel/398f09b1ceb5873479eb51fddd7b6aa7/raw/0555975cbd22f7aab1a7c4f41f3efe4c8d712b4f/privacy-policy.md');
-    
+  void _openPrivacyPolicy(
+    BuildContext context,
+    LanguageProvider langProvider,
+  ) async {
+    final url = Uri.parse(
+      'https://gist.githubusercontent.com/kayasibel/3ef78d8ccd2a7d6756901c23d2ded357/raw/97fd40193dc9f4d6801e722853722e6b2272f5de/privacy-policy.md',
+    );
+
     try {
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
@@ -509,5 +520,316 @@ class SettingsScreen extends StatelessWidget {
         type: SnackBarType.error,
       );
     }
+  }
+}
+
+// Hibrit Rating Dialog Widget
+class _RatingDialog extends StatefulWidget {
+  final LanguageProvider langProvider;
+
+  const _RatingDialog({required this.langProvider});
+
+  @override
+  State<_RatingDialog> createState() => _RatingDialogState();
+}
+
+class _RatingDialogState extends State<_RatingDialog> {
+  int _rating = 0;
+  final TextEditingController _feedbackController = TextEditingController();
+  bool _isSending = false;
+
+  @override
+  void dispose() {
+    _feedbackController.dispose();
+    super.dispose();
+  }
+
+  // Firestore'a feedback kaydet
+  Future<bool> _submitFeedback() async {
+    if (_rating == 0) return false;
+
+    try {
+      await FirebaseFirestore.instance.collection('feedbacks').add({
+        'rating': _rating,
+        'feedback': _feedbackController.text.trim(),
+        'timestamp': FieldValue.serverTimestamp(),
+        'locale': widget.langProvider.currentLocale.languageCode,
+      });
+      return true;
+    } catch (e) {
+      debugPrint('Feedback gönderme hatası: $e');
+      return false;
+    }
+  }
+
+  // Play Store'u aç
+  Future<void> _openPlayStore() async {
+    final url = Uri.parse(
+      'https://play.google.com/store/apps/details?id=com.sibelkaya.vibeset.themes',
+    );
+
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint('Play Store açma hatası: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lang = widget.langProvider;
+    final isHighRating = _rating >= 4;
+    final showContent = _rating > 0;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.grey[900]!.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.1),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.purple.withOpacity(0.2),
+                  blurRadius: 30,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Başlık
+                Text(
+                  lang.getText('rate_dialog_title'),
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Yıldızlar
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    final starIndex = index + 1;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _rating = starIndex;
+                        });
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          _rating >= starIndex
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
+                          size: 44,
+                          color: _rating >= starIndex
+                              ? Colors.amber
+                              : Colors.grey[600],
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 24),
+
+                // Rating sonrası içerik
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: showContent
+                      ? isHighRating
+                          ? _buildHighRatingContent(lang)
+                          : _buildLowRatingContent(lang)
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // 4-5 yıldız için içerik
+  Widget _buildHighRatingContent(LanguageProvider lang) {
+    return Column(
+      key: const ValueKey('high_rating'),
+      children: [
+        // Teşekkür ikonu
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.green.withOpacity(0.2),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.favorite_rounded,
+            size: 48,
+            color: Colors.pinkAccent,
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Teşekkür mesajı
+        Text(
+          lang.getText('rate_thanks_message'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 16,
+            color: Colors.white70,
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Play Store butonu
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              _openPlayStore();
+              Navigator.pop(context);
+            },
+            icon: const Icon(Icons.star_rounded, color: Colors.white),
+            label: Text(
+              lang.getText('rate_on_playstore'),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 1-3 yıldız için içerik
+  Widget _buildLowRatingContent(LanguageProvider lang) {
+    return Column(
+      key: const ValueKey('low_rating'),
+      children: [
+        // Feedback mesajı
+        Text(
+          lang.getText('rate_feedback_message'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 14,
+            color: Colors.white70,
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // TextField
+        TextField(
+          controller: _feedbackController,
+          maxLines: 4,
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            hintText: lang.getText('rate_feedback_hint'),
+            hintStyle: TextStyle(color: Colors.grey[500]),
+            filled: true,
+            fillColor: Colors.white.withOpacity(0.08),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(
+                color: Colors.white.withOpacity(0.1),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(
+                color: Colors.deepPurple,
+                width: 2,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Gönder butonu
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isSending
+                ? null
+                : () async {
+                    setState(() {
+                      _isSending = true;
+                    });
+
+                    final success = await _submitFeedback();
+                    
+                    if (!mounted) return;
+
+                    Navigator.pop(context);
+
+                    if (success) {
+                      showCustomSnackBar(
+                        lang.getText('rate_feedback_sent'),
+                        type: SnackBarType.success,
+                      );
+                    } else {
+                      showCustomSnackBar(
+                        lang.getText('rate_feedback_error'),
+                        type: SnackBarType.error,
+                      );
+                    }
+                  },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.deepPurple,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: _isSending
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : Text(
+                    lang.getText('rate_send'),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
   }
 }

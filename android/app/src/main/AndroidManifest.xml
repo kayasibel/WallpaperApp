@@ -26,15 +26,21 @@
     </queries>
     
     <application
-        android:label="VibeSet Wallpapers"
+        android:label="AniTheme: Anime Wallpapers &amp; Icons"
         android:name="${applicationName}"
-        android:icon="@drawable/app_icon"
-        android:roundIcon="@drawable/app_icon">
+        android:icon="@drawable/icon_animewp"
+        android:roundIcon="@drawable/icon_animewp">
+        
+        <!-- Google AdMob App ID (Test ID) -->
+        <!-- Gerçek uygulama için kendi AdMob App ID'nizi kullanın -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713"/>
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="colorMode|density|fontScale|keyboard|keyboardHidden|layoutDirection|locale|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
             android:hardwareAccelerated="true"

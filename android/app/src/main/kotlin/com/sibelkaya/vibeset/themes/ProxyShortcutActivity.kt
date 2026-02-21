@@ -1,4 +1,4 @@
-package com.sibelkaya.vibeset.themes
+package com.anime.theme.wallpaper
 
 import android.app.Activity
 import android.content.Intent

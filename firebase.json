@@ -1,1 +1,29 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"wallpaper-app-3c8c6","appId":"1:932174522384:android:9884fb5d04209ce8eac295","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"wallpaper-app-3c8c6","configurations":{"android":"1:932174522384:android:9884fb5d04209ce8eac295","ios":"1:932174522384:ios:cca6741a8c67f852eac295","macos":"1:932174522384:ios:cca6741a8c67f852eac295","web":"1:932174522384:web:54d834f9826f31a9eac295","windows":"1:932174522384:web:f0bed54fbf18f244eac295"}}}}}}
+{
+  "project_info": {
+    "project_number": "47010221246",
+    "project_id": "anime-wallpaper-1fd27",
+    "storage_bucket": "anime-wallpaper-1fd27.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:47010221246:android:bc1e8b6320c2de54f9a2ef",
+        "android_client_info": {
+          "package_name": "com.anime.theme.wallpaper"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTF9YC4p2wbnzWlaMJ6Qg73IEdyxNmAJk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

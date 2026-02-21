@@ -15,7 +15,7 @@ class ThemeService {
 
   /// Real-time themes stream (tüm temalar)
   Stream<List<ThemeModel>> getThemesStream() {
-    return _firestore.collection('themes').snapshots().map((snapshot) {
+    return _firestore.collection('Themes').snapshots().map((snapshot) {
       print('Firestore\'dan ${snapshot.docs.length} tema geldi');
       return snapshot.docs.map((doc) => ThemeModel.fromFirestore(doc)).toList();
     }).handleError((error) {
@@ -32,7 +32,7 @@ class ThemeService {
     }
 
     return _firestore
-        .collection('themes')
+        .collection('Themes')
         .where('category', isEqualTo: category)
         .snapshots()
         .map((snapshot) {
@@ -48,7 +48,7 @@ class ThemeService {
   Future<ThemeModel?> getThemeById(String id) async {
     try {
       print('Tema ID: $id getiriliyor...');
-      final doc = await _firestore.collection('themes').doc(id).get();
+      final doc = await _firestore.collection('Themes').doc(id).get();
       if (doc.exists) {
         print('✅ Tema ID: $id bulundu');
         return ThemeModel.fromFirestore(doc);
@@ -65,7 +65,7 @@ class ThemeService {
   Future<IconPackModel?> getIconPackById(String iconPackId) async {
     try {
       print('İkon paketi ID: $iconPackId getiriliyor...');
-      final doc = await _firestore.collection('icons').doc(iconPackId).get();
+      final doc = await _firestore.collection('Icons').doc(iconPackId).get();
       if (doc.exists) {
         print('✅ İkon paketi ID: $iconPackId bulundu');
         final iconPack = IconPackModel.fromFirestore(doc);

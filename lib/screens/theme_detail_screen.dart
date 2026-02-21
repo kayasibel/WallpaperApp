@@ -10,6 +10,7 @@ import '../models/theme_model.dart';
 import '../services/favorite_service.dart';
 import '../services/theme_service.dart';
 import '../services/language_service.dart';
+import '../services/ad_manager.dart';
 import '../utils/custom_snackbar.dart';
 import '../utils/cloudinary_helper.dart';
 import 'icon_mapping_screen.dart';
@@ -26,13 +27,18 @@ class ThemeDetailScreen extends StatefulWidget {
 class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
   final FavoriteService _favoriteService = FavoriteService();
   final ThemeService _themeService = ThemeService();
+  final AdManager _adManager = AdManager();
   bool _isFavorite = false;
   bool _showUI = true;
+  bool _isAdLoading = false;
 
   @override
   void initState() {
     super.initState();
     _checkFavoriteStatus();
+
+    // Reklamı sayfa açılır açılmaz arka planda yükle
+    _adManager.ensureRewardedAdLoaded();
   }
 
   Future<void> _checkFavoriteStatus() async {
@@ -85,6 +91,62 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
         ),
       );
     }
+  }
+
+  /// Reklam gösterip ardından duvar kağıdını uygular
+  Future<void> _showRewardedAdThenApplyWallpaper() async {
+    final langProvider = Provider.of<LanguageProvider>(context, listen: false);
+
+    // Reklam hazır mı kontrol et
+    if (!_adManager.isRewardedReady) {
+      setState(() => _isAdLoading = true);
+
+      // Kullanıcıya loading göster
+      showCustomSnackBar(
+        langProvider.getText('ad_loading'),
+        type: SnackBarType.info,
+      );
+
+      // Timeout ile reklam yüklemesini bekle (max 4 saniye)
+      final adReady = await _adManager.waitForRewardedAd();
+
+      if (!mounted) return;
+      setState(() => _isAdLoading = false);
+
+      if (!adReady) {
+        showCustomSnackBar(
+          langProvider.getText('ad_not_ready'),
+          type: SnackBarType.error,
+        );
+        return;
+      }
+    }
+
+    // Reklam göster ve callback'te duvar kağıdını uygula
+    _adManager.showRewardedAd(
+      onUserEarnedReward: () {
+        // Kullanıcı ödülü kazandı, duvar kağıdını uygula
+        _applyWallpaper();
+      },
+      onAdDismissed: () {
+        // Reklam kapatıldı ama ödül verilmedi
+        if (mounted) {
+          showCustomSnackBar(
+            langProvider.getText('ad_reward_not_earned'),
+            type: SnackBarType.info,
+          );
+        }
+      },
+      onAdFailedToShow: (error) {
+        // Reklam gösterilemedi
+        if (mounted) {
+          showCustomSnackBar(
+            langProvider.getText('ad_failed'),
+            type: SnackBarType.error,
+          );
+        }
+      },
+    );
   }
 
   /// Duvar kağıdını uygula - wallpaperUrl kullan
@@ -202,7 +264,10 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
                           child: _buildActionButton(
                             label: langProvider.getText('wallpaper_btn'),
                             icon: Icons.wallpaper,
-                            onTap: _applyWallpaper,
+                            onTap: _isAdLoading
+                                ? null
+                                : _showRewardedAdThenApplyWallpaper,
+                            isLoading: _isAdLoading,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -257,8 +322,9 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
   Widget _buildActionButton({
     required String label,
     required IconData icon,
-    required VoidCallback onTap,
+    VoidCallback? onTap,
     bool isPrimary = false,
+    bool isLoading = false,
   }) {
     return Material(
       color: Colors.transparent,
@@ -274,21 +340,32 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
             borderRadius: BorderRadius.circular(24),
             border: isPrimary ? Border.all(color: Colors.white24) : null,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: Colors.white, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
+          child: isLoading
+              ? const Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );

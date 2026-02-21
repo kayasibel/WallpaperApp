@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'services/language_service.dart';
+import 'services/ad_manager.dart';
+import 'services/rate_service.dart';
 import 'screens/themes_tab.dart';
 import 'screens/wallpaper_screen.dart';
 import 'screens/favorites_tab.dart';
@@ -14,11 +16,24 @@ import 'screens/settings_screen.dart';
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 
+// Global Navigator key - reklam sonrası navigation koruma
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Firebase'i başlat
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  // Firebase'i başlat (eğer henüz başlatılmamışsa)
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
+
+  // Google Mobile Ads SDK'yı başlat
+  await AdManager.initialize();
+
+  // Reklamları önceden yükle
+  AdManager().preloadAllAds();
 
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -38,9 +53,12 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'VibeSet: Aesthetic Themes & Wallpapers',
+      title: 'AniTheme: Anime Wallpapers & Icons',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: scaffoldMessengerKey,
+      navigatorKey: navigatorKey,
+      // Reklam sonrası state koruması için
+      restorationScopeId: 'app',
       theme: ThemeData.dark(useMaterial3: true).copyWith(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.deepPurple,
@@ -49,7 +67,6 @@ class MyApp extends StatelessWidget {
       ),
       home: const MainScreen(),
     );
-    
   }
 }
 
@@ -62,12 +79,36 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
+  bool _rateCheckDone = false;
 
   final List<Widget> _screens = const [
     ThemesTab(),
     WallpaperScreen(),
     FavoritesTab(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Uygulama açılış sayacını artır ve rating kontrolü yap
+    _initRateService();
+  }
+
+  Future<void> _initRateService() async {
+    // Açılış sayacını artır
+    await RateService().incrementAppOpenCount();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Rating kontrolünü sadece bir kez yap
+    if (!_rateCheckDone) {
+      _rateCheckDone = true;
+      // Rating hatırlatmasını kontrol et (45 sn sonra gösterir)
+      RateService().checkRatingPrompt(context);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

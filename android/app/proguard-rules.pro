@@ -40,8 +40,8 @@
 -keepattributes Exceptions
 
 # Model sınıfları (Firestore için)
--keep class com.sibelkaya.vibeset.themes.models.** { *; }
--keepclassmembers class com.sibelkaya.vibeset.themes.models.** { *; }
+-keep class com.anime.theme.wallpaper.models.** { *; }
+-keepclassmembers class com.anime.theme.wallpaper.models.** { *; }
 
 # Kotlin
 -keep class kotlin.** { *; }

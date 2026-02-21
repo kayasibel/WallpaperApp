@@ -46,7 +46,8 @@ class WallpaperModel {
     }
 
     // Firestore'dan URL al ve optimize et
-    final rawUrl = data['url'] as String? ?? '';
+    // Hem 'url' (küçük) hem 'URL' (büyük) kontrolü yap - case sensitivity
+    final rawUrl = (data['url'] ?? data['URL']) as String? ?? '';
     final optimizedUrl = CloudinaryHelper.optimizeUrl(rawUrl);
 
     return WallpaperModel(
